@@ -6,15 +6,8 @@ namespace HOSUnlock.Configuration;
 
 public class AppConfiguration
 {
-    public string Token1 { get; set; } = TokenConstants.DefaultTokenValue;
-    public string Token2 { get; set; } = TokenConstants.DefaultTokenValue;
-    public string Token3 { get; set; } = TokenConstants.DefaultTokenValue;
-    public string Token4 { get; set; } = TokenConstants.DefaultTokenValue;
-
-    public int Token1RequestShiftMilliseconds { get; set; } = 0;
-    public int Token2RequestShiftMilliseconds { get; set; } = 0;
-    public int Token3RequestShiftMilliseconds { get; set; } = 0;
-    public int Token4RequestShiftMilliseconds { get; set; } = 0;
+    public TokenInfo[] Tokens { get; set; } = [];
+    public int[] TokenShifts { get; set; } = [];
 
     public bool AutoRunOnStart { get; set; } = false;
 
@@ -24,28 +17,25 @@ public class AppConfiguration
     {
         return new AppConfiguration
         {
-            Token1 = "DefaultTokenValue1",
-            Token2 = "DefaultTokenValue2",
-            Token3 = "DefaultTokenValue3",
-            Token4 = "DefaultTokenValue4"
+            Tokens =
+            [
+                new TokenInfo
+                {
+                    Token = TokenConstants.DefaultTokenValue,
+                    Index = 1
+                }
+            ]
         };
     }
 
     public bool IsConfigurationValid()
     {
         return
-            !string.IsNullOrEmpty(Token1)
-            && !string.IsNullOrEmpty(Token2)
-            && !string.IsNullOrEmpty(Token3)
-            && !string.IsNullOrEmpty(Token4)
-            && !string.Equals(Token1, TokenConstants.DefaultTokenValue)
-            && !string.Equals(Token2, TokenConstants.DefaultTokenValue)
-            && !string.Equals(Token3, TokenConstants.DefaultTokenValue)
-            && !string.Equals(Token4, TokenConstants.DefaultTokenValue)
-            && Token1RequestShiftMilliseconds > 0
-            && Token2RequestShiftMilliseconds > 0
-            && Token3RequestShiftMilliseconds > 0
-            && Token4RequestShiftMilliseconds > 0;
+            Tokens.Length >= 1
+            && !Tokens.Any(t => string.IsNullOrWhiteSpace(t.Token) || t.Token == TokenConstants.DefaultTokenValue || t.Index < 1)
+            && !Tokens.Any(t => Tokens.Count(x => x.Index == t.Index) > 1)
+            && TokenShifts.Length >= 1
+            && !TokenShifts.Any(ts => TokenShifts.Count(x => x == ts) > 1);
     }
 
     public static async Task Load(string configPath = "")
@@ -98,5 +88,36 @@ public class AppConfiguration
         }
 
         return configFromFile;
+    }
+}
+
+public sealed record TokenInfo : IComparable<TokenInfo>, IEquatable<TokenInfo>
+{
+    public string Token { get; set; } = TokenConstants.DefaultTokenValue;
+    public int Index { get; set; } = 0;
+
+    public override int GetHashCode()
+    {
+        return Token.Length + Index;
+    }
+
+    public bool Equals(TokenInfo? other)
+    {
+        if (other == null)
+            return false;
+
+        return string.Equals(Token, other.Token, StringComparison.OrdinalIgnoreCase) && Index == other.Index;
+    }
+
+    public int CompareTo(TokenInfo? other)
+    {
+        if (other == null)
+            return 1;
+
+        var indexComparison = Index.CompareTo(other.Index);
+        if (indexComparison != 0)
+            return indexComparison;
+
+        return string.Compare(Token, other.Token, StringComparison.OrdinalIgnoreCase);
     }
 }

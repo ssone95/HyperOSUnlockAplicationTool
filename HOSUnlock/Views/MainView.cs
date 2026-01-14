@@ -195,7 +195,8 @@ public partial class MainView
     {
         try
         {
-            Logger.LogDebug($"Clock threshold exceeded: Index {e.ThresholdIndex}, Beijing Time: {e.BeijingTime}, UTC Time: {e.UtcTime}, Local Time: {e.LocalTime}");
+            var shiftDetails = e.TokenShiftDetails;
+            Logger.LogDebug($"Clock threshold exceeded: Token #{shiftDetails.TokenIndex} Shift #{shiftDetails.ShiftIndex}, Beijing Time: {e.BeijingTime}, UTC Time: {e.UtcTime}, Local Time: {e.LocalTime}");
             UpdateButtonStates(true, true);
         }
         catch (Exception ex)

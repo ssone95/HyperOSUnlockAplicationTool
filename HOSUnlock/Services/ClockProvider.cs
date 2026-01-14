@@ -1,12 +1,17 @@
+//#define DBG
+
 using GuerrillaNtp;
 using HOSUnlock.Configuration;
 using HOSUnlock.Constants;
+using HOSUnlock.Models.Common;
 using System.Collections.Concurrent;
 
 namespace HOSUnlock.Services;
 
 public class ClockProvider : IDisposable
 {
+    private const string ShanghaiTimeZoneString = "Asia/Shanghai";
+
     private NtpClient _ntpClient = null!;
     private Timer _timer = null!;
     public DateTime UtcNow
@@ -14,9 +19,8 @@ public class ClockProvider : IDisposable
         get; private set;
     }
 
-    private readonly TimeZoneInfo _beijingTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Shanghai");
+    private readonly TimeZoneInfo _beijingTimeZone = TimeZoneInfo.FindSystemTimeZoneById(ShanghaiTimeZoneString);
     private readonly TimeZoneInfo _localTimeZone = TimeZoneInfo.Local;
-    private readonly TimeZoneInfo _utcTimeZone = TimeZoneInfo.Utc;
 
 
     public DateTime BeijingNow
@@ -37,7 +41,7 @@ public class ClockProvider : IDisposable
 
     private AppConfiguration _config = AppConfiguration.Instance;
 
-    private ConcurrentDictionary<int, (DateTime threshold, bool flagged)> _requestTimeThresholds = [];
+    private ConcurrentDictionary<TokenShiftDefinition, (DateTime threshold, bool flagged)> _requestTimeThresholds = [];
 
     public static ClockProvider Instance { get; private set; } = null!;
 
@@ -45,13 +49,13 @@ public class ClockProvider : IDisposable
 
     public event EventHandler? OnAllThresholdsReached = null!;
 
-    private async Task<bool> WereAllThresholdsReached()
+    public async Task<bool> WereAllThresholdsReached()
     {
         bool allReached = false;
         try
         {
             await _thresholdLoopSemaphore.WaitAsync();
-            allReached = _requestTimeThresholds.Select(x => x.Value.flagged).All(x => x == true);
+            allReached = _requestTimeThresholds.Select(x => x.Value.flagged).All(x => x);
         }
         catch (Exception ex)
         {
@@ -69,7 +73,7 @@ public class ClockProvider : IDisposable
         Instance.Dispose();
     }
 
-    private static readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
+    private static readonly SemaphoreSlim _initLock = new(1, 1);
 
     public static async Task Initialize()
     {
@@ -98,11 +102,17 @@ public class ClockProvider : IDisposable
                 originalUtcTime.Millisecond,
                 DateTimeKind.Utc);
 
-            Instance._requestTimeThresholds = new ConcurrentDictionary<int, (DateTime threshold, bool flagged)>();
-            Instance._requestTimeThresholds.AddOrUpdate(1, (CalculateNextThreshold(Instance._config.Token1RequestShiftMilliseconds), false), (key, oldValue) => oldValue);
-            Instance._requestTimeThresholds.AddOrUpdate(2, (CalculateNextThreshold(Instance._config.Token2RequestShiftMilliseconds), false), (key, oldValue) => oldValue);
-            Instance._requestTimeThresholds.AddOrUpdate(3, (CalculateNextThreshold(Instance._config.Token3RequestShiftMilliseconds), false), (key, oldValue) => oldValue);
-            Instance._requestTimeThresholds.AddOrUpdate(4, (CalculateNextThreshold(Instance._config.Token4RequestShiftMilliseconds), false), (key, oldValue) => oldValue);
+            Instance._requestTimeThresholds = new ConcurrentDictionary<TokenShiftDefinition, (DateTime threshold, bool flagged)>();
+            foreach (var shiftPair in Instance
+                ._config
+                .Tokens
+                .SelectMany(tokenInfo => Instance
+                    ._config
+                    .TokenShifts
+                    .Select((shift, index) => new TokenShiftDefinition(tokenInfo.Index, tokenInfo.Token, index + 1, shift))))
+            {
+                Instance._requestTimeThresholds.AddOrUpdate(shiftPair, (CalculateNextThreshold(shiftPair.ShiftMilliseconds), false), (key, oldValue) => oldValue);
+            }
 
             Logger.LogInfo("Initial NTP time obtained: {0} (Beijing Time: {1})",
                 Instance.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"),
@@ -120,7 +130,7 @@ public class ClockProvider : IDisposable
         }
     }
 
-    private readonly SemaphoreSlim _thresholdLoopSemaphore = new SemaphoreSlim(1, 1);
+    private readonly SemaphoreSlim _thresholdLoopSemaphore = new(1, 1);
 
 
     private async Task ExecuteOnDictionarySync(Action executeAfter)
@@ -143,10 +153,10 @@ public class ClockProvider : IDisposable
     {
         await ExecuteOnDictionarySync(async () =>
         {
-            ProcessThreshold(1);
-            ProcessThreshold(2);
-            ProcessThreshold(3);
-            ProcessThreshold(4);
+            foreach (var threshold in _requestTimeThresholds.Keys)
+            {
+                ProcessThreshold(threshold);
+            }
 
             var allReached = _requestTimeThresholds.Select(x => x.Value.flagged).All(x => x);
             if (allReached && _timer.Change(Timeout.Infinite, Timeout.Infinite))
@@ -162,11 +172,11 @@ public class ClockProvider : IDisposable
         return (LocalNow, UtcNow, BeijingNow);
     }
 
-    public async Task<Dictionary<int, (DateTime beijing, DateTime utc, DateTime local)>> GetThresholdSnapshots()
+    public async Task<Dictionary<TokenShiftDefinition, (DateTime beijing, DateTime utc, DateTime local)>> GetThresholdSnapshots()
     {
-        var result = new Dictionary<int, (DateTime beijing, DateTime utc, DateTime local)>();
+        var result = new Dictionary<TokenShiftDefinition, (DateTime beijing, DateTime utc, DateTime local)>();
 
-        var beijingTimezone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Shanghai");
+        var beijingTimezone = TimeZoneInfo.FindSystemTimeZoneById(ShanghaiTimeZoneString);
         var localTimezone = TimeZoneInfo.Local;
 
         foreach (var kvp in _requestTimeThresholds)
@@ -179,25 +189,23 @@ public class ClockProvider : IDisposable
         return result;
     }
 
-    private void ProcessThreshold(int thresholdIndex)
+    private void ProcessThreshold(TokenShiftDefinition tokenShiftDefinition)
     {
-        if (!_requestTimeThresholds.TryGetValue(thresholdIndex, out var threshold))
+        if (!_requestTimeThresholds.TryGetValue(tokenShiftDefinition, out var threshold))
             return;
-
-        if ((BeijingNow >= threshold.threshold
-            /*|| UtcNow.Second == 0 && thresholdIndex == 1*/)
-            && !threshold.flagged) // Safety check for 16:43:00 Beijing Time
+#if DBG
+        if ((BeijingNow >= threshold.threshold || BeijingNow.Second == 0) && !threshold.flagged)
+#else
+        if (BeijingNow >= threshold.threshold && !threshold.flagged)
+#endif
         {
-            // _requestTimeThresholds.TryRemove(thresholdIndex, out _);
-            _requestTimeThresholds.AddOrUpdate(thresholdIndex, (threshold.threshold, true), (key, oldValue) => (threshold.threshold, true));
+            _requestTimeThresholds.AddOrUpdate(tokenShiftDefinition, (threshold.threshold, true), (key, oldValue) => (threshold.threshold, true));
 
-            Logger.LogInfo("Clock threshold exceeded for Token{0} at Beijing Time: {1}",
-                thresholdIndex,
-                BeijingNow.ToString("yyyy-MM-dd HH:mm:ss"));
+            Logger.LogDebug($"Clock threshold exceeded: Token #{tokenShiftDefinition.TokenIndex} Shift #{tokenShiftDefinition.ShiftIndex}\n\tBeijing Time: {BeijingNow:yyyy-MM-dd HH:mm:ss.fff}\n\tUTC Time: {UtcNow:yyyy-MM-dd HH:mm:ss.fff}\n\tLocal Time: {LocalNow:yyyy-MM-dd HH:mm:ss.fff}");
 
             OnClockThresholdExceeded?.Invoke(this, new ClockThresholdExceededArgs
             {
-                ThresholdIndex = thresholdIndex,
+                TokenShiftDetails = tokenShiftDefinition,
                 UtcTime = UtcNow,
                 BeijingTime = BeijingNow
             });
@@ -215,11 +223,11 @@ public class ClockProvider : IDisposable
             0, 0, 0,
             DateTimeKind.Utc);
 
-        var beijingThresholdDt = TimeZoneInfo.ConvertTimeFromUtc(nextThresholdUtc, TimeZoneInfo.FindSystemTimeZoneById("Asia/Shanghai"));
+        var beijingThresholdDt = TimeZoneInfo.ConvertTimeFromUtc(nextThresholdUtc, TimeZoneInfo.FindSystemTimeZoneById(ShanghaiTimeZoneString));
         if (beijingThresholdDt <= (utcNow.AddHours(8)))
         {
             nextThresholdUtc = nextThresholdUtc.AddDays(1);
-            beijingThresholdDt = TimeZoneInfo.ConvertTimeFromUtc(nextThresholdUtc, TimeZoneInfo.FindSystemTimeZoneById("Asia/Shanghai"));
+            beijingThresholdDt = TimeZoneInfo.ConvertTimeFromUtc(nextThresholdUtc, TimeZoneInfo.FindSystemTimeZoneById(ShanghaiTimeZoneString));
         }
 
         var thresholdDt = beijingThresholdDt.AddMilliseconds(-shiftMilliseconds);
@@ -239,7 +247,7 @@ public class ClockProvider : IDisposable
 
     public class ClockThresholdExceededArgs
     {
-        public int ThresholdIndex { get; set; }
+        public TokenShiftDefinition TokenShiftDetails { get; set; }
         public DateTime UtcTime { get; set; }
         public DateTime BeijingTime { get; set; }
         public DateTime LocalTime
