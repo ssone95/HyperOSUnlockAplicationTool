@@ -1,27 +1,15 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace HOSUnlock.Models.Base
+namespace HOSUnlock.Models.Base;
+
+public sealed class BaseResponse<T> where T : class
 {
-    public class BaseResponse<T> where T : class
-    {
-        [JsonPropertyName("code")]
-        public int Code { get; set; }
+    [JsonPropertyName("code")]
+    public int Code { get; init; }
 
-        [JsonPropertyName("data")]
-        public T? Data { get; set; }
+    [JsonPropertyName("data")]
+    public T? Data { get; init; }
 
-        [JsonPropertyName("message")]
-        public string? Message { get; set; }
-
-        public BaseResponse()
-        {
-        }
-
-        public BaseResponse(int code, T? data, string? message = null)
-        {
-            Code = code;
-            Data = data;
-            Message = message;
-        }
-    }
+    [JsonPropertyName("message")]
+    public string? Message { get; init; }
 }

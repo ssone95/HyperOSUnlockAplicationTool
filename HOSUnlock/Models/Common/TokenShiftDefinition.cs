@@ -1,32 +1,53 @@
 ﻿using HOSUnlock.Configuration;
 
-namespace HOSUnlock.Models.Common
+namespace HOSUnlock.Models.Common;
+
+/// <summary>
+/// Represents a token shift definition for threshold timing.
+/// </summary>
+public sealed record TokenShiftDefinition(
+    int TokenIndex,
+    string Token,
+    int ShiftIndex,
+    int ShiftMilliseconds) : IComparable<TokenShiftDefinition>
 {
-    public sealed record TokenShiftDefinition(int TokenIndex, string Token, int ShiftIndex, int ShiftMilliseconds) : IComparable<TokenShiftDefinition>, IEquatable<TokenShiftDefinition>
+    public int CompareTo(TokenShiftDefinition? other)
     {
-        public int CompareTo(TokenShiftDefinition? other)
-        {
-            if (other == null)
-                return -1;
+        if (other is null)
+            return 1;
 
-            return Equals(other) ? 0 : -1;
-        }
-        public override int GetHashCode()
-        {
-            return Token.Length + TokenIndex + ShiftMilliseconds + ShiftIndex;
-        }
+        var tokenIndexComparison = TokenIndex.CompareTo(other.TokenIndex);
+        if (tokenIndexComparison != 0)
+            return tokenIndexComparison;
 
-        public bool Equals(TokenShiftDefinition? other)
-        {
-            if (other == null)
-                return false;
+        var shiftIndexComparison = ShiftIndex.CompareTo(other.ShiftIndex);
+        if (shiftIndexComparison != 0)
+            return shiftIndexComparison;
 
-            return string.Equals(Token, other.Token, StringComparison.OrdinalIgnoreCase)
-                && TokenIndex == other.TokenIndex
-                && ShiftMilliseconds == other.ShiftMilliseconds
-                && ShiftIndex == other.ShiftIndex;
-        }
+        var shiftMsComparison = ShiftMilliseconds.CompareTo(other.ShiftMilliseconds);
+        if (shiftMsComparison != 0)
+            return shiftMsComparison;
 
-        public TokenInfo GetTokenInfo() => new() { Index = TokenIndex, Token = Token };
+        return string.Compare(Token, other.Token, StringComparison.OrdinalIgnoreCase);
     }
+
+    public bool Equals(TokenShiftDefinition? other)
+    {
+        if (other is null)
+            return false;
+
+        return TokenIndex == other.TokenIndex
+            && ShiftIndex == other.ShiftIndex
+            && ShiftMilliseconds == other.ShiftMilliseconds
+            && string.Equals(Token, other.Token, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public override int GetHashCode()
+        => HashCode.Combine(
+            TokenIndex,
+            ShiftIndex,
+            ShiftMilliseconds,
+            StringComparer.OrdinalIgnoreCase.GetHashCode(Token));
+
+    public TokenInfo ToTokenInfo() => new(Token, TokenIndex);
 }

@@ -2,103 +2,84 @@ using System;
 
 namespace HOSUnlock.Services;
 
-public class Logger : IDisposable
+public sealed class Logger : IDisposable
 {
-    public FileStream logFileStream = null!;
-    public StreamWriter logStreamWriter = null!;
-
+    private readonly FileStream _logFileStream;
+    private readonly StreamWriter _logStreamWriter;
     private readonly string _prefix;
-    private readonly bool _logToConsoleToo = false;
+    private readonly bool _logToConsoleToo;
+    private bool _disposed;
 
-    private Logger(string prefix = "UI", bool logToConsoleToo = false)
+    private Logger(string prefix, bool logToConsoleToo)
     {
         _prefix = prefix;
         _logToConsoleToo = logToConsoleToo;
+
         var logPath = InitializeLogsFolder();
         var logFilePath = GetLogFilePath(logPath);
-        InitializeLogFileStream(logFilePath);
+
+        _logFileStream = new FileStream(logFilePath, FileMode.Append, FileAccess.Write, FileShare.Read);
+        _logStreamWriter = new StreamWriter(_logFileStream) { AutoFlush = true };
     }
 
-    private string GetLogFilePath(string logPath)
-    {
-        var now = DateTime.Now;
-        var logFileName = $"log_{_prefix}_{now:yyyyMMdd_HHmm}.txt";
-        var logFilePath = System.IO.Path.Combine(logPath, logFileName);
-        return logFilePath;
-    }
-
-    private void InitializeLogFileStream(string logFilePath)
-    {
-        logFileStream = new FileStream(logFilePath, FileMode.Append, FileAccess.Write, FileShare.Read);
-        logStreamWriter = new StreamWriter(logFileStream)
-        {
-            AutoFlush = true,
-        };
-    }
-
-    private void DeinitializeLogStream()
-    {
-        logStreamWriter?.Flush();
-        logStreamWriter?.Dispose();
-        logFileStream?.Dispose();
-    }
-
-    public static void DisposeLogger()
-    {
-        Instance.Dispose();
-    }
-
-    private static string InitializeLogsFolder()
-    {
-        var workingDirectory = AppDomain.CurrentDomain.BaseDirectory;
-        var logsDirectory = System.IO.Path.Combine(workingDirectory, "logs");
-        if (!System.IO.Directory.Exists(logsDirectory))
-        {
-            System.IO.Directory.CreateDirectory(logsDirectory);
-        }
-
-        return logsDirectory;
-    }
-
-    public enum LogLevel
-    {
-        Debug,
-        Info,
-        Warning,
-        Error
-    }
-
-    public static Logger Instance { get; private set; } = null!;
+    public static Logger? Instance { get; private set; }
 
     public static void InitializeLogger(string prefix = "UI", bool logToConsoleToo = false)
     {
         Instance ??= new Logger(prefix, logToConsoleToo);
     }
 
+    public static void DisposeLogger()
+    {
+        Instance?.Dispose();
+        Instance = null;
+    }
+
+    private string GetLogFilePath(string logPath)
+    {
+        var now = DateTime.Now;
+        var logFileName = $"log_{_prefix}_{now:yyyyMMdd_HHmm}.txt";
+        return Path.Combine(logPath, logFileName);
+    }
+
+    private static string InitializeLogsFolder()
+    {
+        var logsDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
+
+        if (!Directory.Exists(logsDirectory))
+        {
+            Directory.CreateDirectory(logsDirectory);
+        }
+
+        return logsDirectory;
+    }
+
     public static void Log(LogLevel level, string message, Exception? ex = null, params object[] args)
     {
-        var logMessage = $"[{FormatLogLevel(level)}] [{Instance._prefix}] {string.Format(message, args)}";
-        if (ex != null)
+        if (Instance is null)
+            return;
+
+        var formattedMessage = args.Length > 0 ? string.Format(message, args) : message;
+        var logMessage = $"[{FormatLogLevel(level)}] [{Instance._prefix}] {formattedMessage}";
+
+        if (ex is not null)
         {
             logMessage += $"\nException: {ex}";
         }
+
         Instance.WriteLog(logMessage);
     }
 
     public static void LogDebug(string message, params object[] args)
     {
-        if (string.IsNullOrEmpty(message.Trim()))
-            return;
-
-        Log(LogLevel.Debug, message, null, args);
+        if (!string.IsNullOrWhiteSpace(message))
+            Log(LogLevel.Debug, message, null, args);
     }
 
     public static void LogInfo(string message, params object[] args)
     {
-        if (string.IsNullOrEmpty(message.Trim()))
-            return;
-
-        Log(LogLevel.Info, message, null, args);
+        if (!string.IsNullOrWhiteSpace(message))
+            Log(LogLevel.Info, message, null, args);
     }
 
     public static void LogWarning(string message, params object[] args)
@@ -111,31 +92,45 @@ public class Logger : IDisposable
         Log(LogLevel.Error, message, ex, args);
     }
 
-    public void WriteLog(string message)
+    private void WriteLog(string message)
     {
+        if (_disposed)
+            return;
+
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
         var logMessage = $"{timestamp} {message}";
-        logStreamWriter.WriteLine(logMessage);
+
+        _logStreamWriter.WriteLine(logMessage);
 
         if (_logToConsoleToo)
             Console.WriteLine(logMessage);
     }
 
-    private static string FormatLogLevel(LogLevel level)
+    private static string FormatLogLevel(LogLevel level) => level switch
     {
-        return level switch
-        {
-            LogLevel.Debug => "DBG",
-            LogLevel.Info => "INF",
-            LogLevel.Warning => "WRN",
-            LogLevel.Error => "ERR",
-            _ => "N/A"
-        };
-    }
+        LogLevel.Debug => "DBG",
+        LogLevel.Info => "INF",
+        LogLevel.Warning => "WRN",
+        LogLevel.Error => "ERR",
+        _ => "N/A"
+    };
 
     public void Dispose()
     {
-        DeinitializeLogStream();
-        GC.SuppressFinalize(this);
+        if (_disposed)
+            return;
+
+        _disposed = true;
+        _logStreamWriter.Flush();
+        _logStreamWriter.Dispose();
+        _logFileStream.Dispose();
+    }
+
+    public enum LogLevel
+    {
+        Debug,
+        Info,
+        Warning,
+        Error
     }
 }

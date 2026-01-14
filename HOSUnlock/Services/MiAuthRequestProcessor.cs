@@ -4,127 +4,151 @@ using HOSUnlock.Exceptions;
 using HOSUnlock.Models;
 using HOSUnlock.Models.Base;
 using HOSUnlock.Models.Common;
-using static HOSUnlock.Configuration.AppConfiguration;
 
-namespace HOSUnlock.Services
+namespace HOSUnlock.Services;
+
+public sealed class MiAuthRequestProcessor : IDisposable
 {
-    public class MiAuthRequestProcessor : IDisposable
+    private readonly Dictionary<TokenInfo, MiDataService> _miDataServices;
+    private readonly CancellationTokenSource _ctSource;
+    private bool _disposed;
+
+    public MiAuthRequestProcessor(AppConfiguration configuration, CancellationTokenSource ctSource)
     {
-        private readonly Dictionary<TokenInfo, MiDataService> _miDataServices;
-        private readonly CancellationTokenSource _ctSource;
-        public MiAuthRequestProcessor(AppConfiguration configuration, CancellationTokenSource ctSource)
+        ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(ctSource);
+
+        _ctSource = ctSource;
+        _miDataServices = configuration.Tokens
+            .OrderBy(x => x.Index)
+            .ToDictionary(
+                tokenInfo => tokenInfo,
+                tokenInfo => new MiDataService(tokenInfo.Token, _ctSource.Token));
+    }
+
+    public async Task<Dictionary<TokenInfo, BaseResponse<BlCheckResponseDto>>> StartAsync()
+    {
+        var preCheckResults = await GetPreCheckStatusesAsync().ConfigureAwait(false);
+
+        if (!preCheckResults.Values.All(x => x.Data is not null))
         {
-            _ctSource = ctSource;
-            _miDataServices = configuration.Tokens.Select(x => (Service: new MiDataService(x.Token, _ctSource.Token), TokenInfo: x))
-                .OrderBy(x => x.TokenInfo.Index)
-                .ToDictionary(x => x.TokenInfo, x => x.Service);
+            Logger.LogError("Pre-check failed. One or more MiDataServices could not retrieve status.");
+            throw new InvalidOperationException("Pre-check failed. Cannot start MiAuthRequestProcessor.");
         }
 
-        public async Task<Dictionary<TokenInfo, BaseResponse<BlCheckResponseDto>>> Start()
+        return preCheckResults;
+    }
+
+    public async Task<BaseResponse<BlCheckResponseDto>> RunSingleBlCheckAsync(TokenInfo tokenInfo)
+    {
+        try
         {
-            var preCheckResults = await GetPreCheckStatuses();
-            if (!preCheckResults.All(x => x.Value.Data is not null))
+            if (!_miDataServices.TryGetValue(tokenInfo, out var miDataService))
             {
-                Logger.LogError("Pre-check failed. One or more MiDataServices could not retrieve status.");
-                throw new InvalidOperationException("Pre-check failed. Cannot start MiAuthRequestProcessor.");
+                Logger.LogError($"No MiDataService found with token index {tokenInfo.Index}.");
+                throw new MiException("Invalid token index.", MiDataConstants.STATUS_CODE_OTHER_FAILURE);
             }
-            return preCheckResults;
+
+            var response = await miDataService.GetStatusCheckResultAsync().ConfigureAwait(false);
+
+            if (response?.Data is null)
+            {
+                Logger.LogError($"MiDataService {tokenInfo.Index} - Failed to retrieve BL check result. Response Code: {response?.Code}, Message: {response?.Message}");
+                throw new MiException("Failed to retrieve BL check result.", response?.Code ?? MiDataConstants.STATUS_CODE_OTHER_FAILURE);
+            }
+
+            return response;
+        }
+        catch (MiException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError($"Error during BL check for token {tokenInfo.Index}.", ex);
+            throw new MiException("Error during BL check.", ex, MiDataConstants.STATUS_CODE_OTHER_FAILURE);
+        }
+    }
+
+    private async Task<Dictionary<TokenInfo, BaseResponse<BlCheckResponseDto>>> GetPreCheckStatusesAsync()
+    {
+        var tasks = _miDataServices.Keys
+            .Select(async key => (Key: key, Result: await RunSingleBlCheckAsync(key).ConfigureAwait(false)))
+            .ToList();
+
+        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+
+        var dictionary = new Dictionary<TokenInfo, BaseResponse<BlCheckResponseDto>>();
+        foreach (var (key, result) in results)
+        {
+            if (result?.Data is null)
+            {
+                Logger.LogError($"MiDataService {key.Index} - Failed to retrieve status. Response Code: {result?.Code}, Message: {result?.Message}");
+                throw new MiException("Failed to retrieve status during pre-check.", result?.Code ?? -1);
+            }
+            dictionary.Add(key, result);
         }
 
-        public async Task<BaseResponse<BlCheckResponseDto>> RunSingleBlCheck(TokenInfo tokenInfo)
+        return dictionary;
+    }
+
+    public async Task<BaseResponse<ApplyBlAuthResponseDto>> ApplyForUnlockAsync(TokenShiftDefinition tokenShift)
+    {
+        try
         {
-            try
+            var tokenInfo = tokenShift.ToTokenInfo();
+
+            if (!_miDataServices.TryGetValue(tokenInfo, out var miDataService))
             {
-                var miDataService = _miDataServices.GetValueOrDefault(tokenInfo);
-                if (miDataService == null)
-                {
-                    Logger.LogError($"No MiDataService found with token index {tokenInfo.Index}.");
-                    throw new MiException("Invalid token index.", statusCode: MiDataConstants.STATUS_CODE_OTHER_FAILURE);
-                }
-                var response = await miDataService.GetStatusCheckResult();
-                if (response == null || response.Data == null)
-                {
-                    Logger.LogError($"MiDataService {tokenInfo.Index} - Failed to retrieve BL check result. Response Code: {response?.Code}, Message: {response?.Message}");
-                    throw new MiException("Failed to retrieve BL check result.", response?.Code ?? MiDataConstants.STATUS_CODE_OTHER_FAILURE);
-                }
-                return response;
+                Logger.LogError($"No MiDataService found for token index {tokenInfo.Index}.");
+                throw new MiException("Invalid token index.", MiDataConstants.STATUS_CODE_OTHER_FAILURE);
             }
-            catch (Exception ex)
+
+            var response = await miDataService.GetApplyAuthForUnlockResultAsync().ConfigureAwait(false);
+
+            if (response?.Data is null)
             {
-                Logger.LogError($"Error during BL check for token {tokenInfo.Index}.", ex);
-                throw new MiException("Error during BL check.", ex, statusCode: MiDataConstants.STATUS_CODE_OTHER_FAILURE);
+                Logger.LogError($"MiDataService {tokenInfo.Index} - Failed to apply for unlock. Response Code: {response?.Code}, Message: {response?.Message}");
+                throw new MiException("Failed to apply for unlock.", response?.Code ?? MiDataConstants.STATUS_CODE_OTHER_FAILURE);
             }
+
+            return response;
+        }
+        catch (MiException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError($"Error applying for unlock with token {tokenShift.TokenIndex} shift {tokenShift.ShiftIndex}.", ex);
+            throw new MiException("Error applying for unlock.", ex, MiDataConstants.STATUS_CODE_OTHER_FAILURE);
+        }
+    }
+
+    public async Task StopAsync()
+    {
+        try
+        {
+            await _ctSource.CancelAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError("Error stopping MiAuthRequestProcessor.", ex);
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+
+        _disposed = true;
+
+        foreach (var service in _miDataServices.Values)
+        {
+            service.Dispose();
         }
 
-        private async Task<Dictionary<TokenInfo, BaseResponse<BlCheckResponseDto>>> GetPreCheckStatuses()
-        {
-            var serviceTasks = _miDataServices.Keys.Select(x => (Key: x, DataTask: RunSingleBlCheck(x))).ToList();
-            await Task.WhenAll(serviceTasks.Select(x => x.DataTask));
-
-            Dictionary<TokenInfo, BaseResponse<BlCheckResponseDto>> results = [];
-            foreach (var response in serviceTasks)
-            {
-                var key = response.Key;
-                var dataResponse = response.DataTask.Result;
-                if (dataResponse == null || dataResponse.Data == null)
-                {
-                    Logger.LogError($"MiDataService {key} - Failed to retrieve status. Response Code: {dataResponse?.Code}, Message: {dataResponse?.Message}");
-                    throw new MiException("Failed to retrieve status during pre-check.", dataResponse?.Code ?? -1);
-                }
-                results.Add(key, dataResponse);
-            }
-
-            return results;
-        }
-
-        public async Task<BaseResponse<ApplyBlAuthResponseDto>> ApplyForUnlock(TokenShiftDefinition tokenShift)
-        {
-            try
-            {
-                var tokenInfo = tokenShift.GetTokenInfo();
-                var miDataService = _miDataServices.GetValueOrDefault(tokenInfo);
-                if (miDataService == null)
-                {
-                    Logger.LogError($"No MiDataService found for token index {tokenInfo.Index}.");
-                    throw new MiException("Invalid token index.", statusCode: MiDataConstants.STATUS_CODE_OTHER_FAILURE);
-                }
-
-                var response = await miDataService.GetApplyAuthForUnlockResult();
-                if (response == null || response.Data == null)
-                {
-                    Logger.LogError($"MiDataService {tokenInfo.Index} - Failed to apply for unlock. Response Code: {response?.Code}, Message: {response?.Message}");
-                    throw new MiException("Failed to apply for unlock.", response?.Code ?? MiDataConstants.STATUS_CODE_OTHER_FAILURE);
-                }
-
-                return response;
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError($"Error applying for unlock with token {tokenShift.TokenIndex} shift {tokenShift.ShiftIndex}.", ex);
-                throw new MiException("Error applying for unlock.", ex, statusCode: MiDataConstants.STATUS_CODE_OTHER_FAILURE);
-            }
-        }
-
-        public async Task Stop()
-        {
-            try
-            {
-                await _ctSource.CancelAsync();
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError("Error stopping MiAuthRequestProcessor.", ex);
-            }
-        }
-
-        public void Dispose()
-        {
-            foreach (var service in _miDataServices.Values)
-            {
-                service.Dispose();
-            }
-
-            GC.SuppressFinalize(this);
-        }
+        _miDataServices.Clear();
     }
 }

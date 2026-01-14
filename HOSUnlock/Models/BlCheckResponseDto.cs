@@ -1,85 +1,64 @@
 ﻿using HOSUnlock.Enums;
 using System.Text.Json.Serialization;
 
-namespace HOSUnlock.Models
+namespace HOSUnlock.Models;
+
+public sealed class BlCheckResponseDto
 {
-    public class BlCheckResponseDto
+    [JsonPropertyName("is_pass")]
+    public int IsPass { get; init; }
+
+    [JsonPropertyName("button_state")]
+    public int ButtonState { get; init; }
+
+    [JsonPropertyName("deadline_format")]
+    public string? DeadlineFormat { get; init; }
+
+    [JsonIgnore]
+    public MiEnums.MiIsPassState MiEnumIsPass
     {
-        [JsonPropertyName("is_pass")]
-        public int IsPass { get; set; }
-
-        [JsonPropertyName("button_state")]
-        public int ButtonState { get; set; }
-
-        [JsonPropertyName("deadline_format")]
-        public string DeadlineFormat { get; set; }
-
-        [JsonIgnore]
-        public MiEnums.MiIsPassState MiEnumIsPass
+        get
         {
-            get
-            {
-                MiEnums.MiIsPassState state;
-                try
-                {
-                    state = (MiEnums.MiIsPassState)IsPass;
-                }
-                catch
-                {
-                    state = MiEnums.MiIsPassState.Unknown;
-                }
-                return state;
-            }
-        }
+            if (Enum.IsDefined(typeof(MiEnums.MiIsPassState), IsPass))
+                return (MiEnums.MiIsPassState)IsPass;
 
-        [JsonIgnore]
-        public MiEnums.MiButtonState MiEnumButtonState
-        {
-            get
-            {
-                MiEnums.MiButtonState state;
-                try
-                {
-                    state = (MiEnums.MiButtonState)ButtonState;
-                }
-                catch
-                {
-                    state = MiEnums.MiButtonState.Unknown;
-                }
-                return state;
-            }
+            return MiEnums.MiIsPassState.Unknown;
         }
     }
 
-    public class ApplyBlAuthResponseDto
+    [JsonIgnore]
+    public MiEnums.MiButtonState MiEnumButtonState
     {
-        [JsonPropertyName("apply_result")]
-        public int? ApplyResult { get; set; }
-
-        [JsonIgnore]
-        public MiEnums.MiApplyResult ApplyResultState
+        get
         {
-            get
-            {
-                if (ApplyResult == null)
-                {
-                    return MiEnums.MiApplyResult.Unknown;
-                }
+            if (Enum.IsDefined(typeof(MiEnums.MiButtonState), ButtonState))
+                return (MiEnums.MiButtonState)ButtonState;
 
-                MiEnums.MiApplyResult result;
-                try
-                {
-                    result = (MiEnums.MiApplyResult)ApplyResult;
-                }
-                catch
-                {
-                    result = MiEnums.MiApplyResult.Unknown;
-                }
-                return result;
-            }
+            return MiEnums.MiButtonState.Unknown;
         }
+    }
+}
 
-        [JsonPropertyName("deadline_format")]
-        public string? DeadlineFormat { get; set; }
+public sealed class ApplyBlAuthResponseDto
+{
+    [JsonPropertyName("apply_result")]
+    public int? ApplyResult { get; init; }
+
+    [JsonPropertyName("deadline_format")]
+    public string? DeadlineFormat { get; init; }
+
+    [JsonIgnore]
+    public MiEnums.MiApplyResult ApplyResultState
+    {
+        get
+        {
+            if (ApplyResult is null)
+                return MiEnums.MiApplyResult.Unknown;
+
+            if (Enum.IsDefined(typeof(MiEnums.MiApplyResult), ApplyResult.Value))
+                return (MiEnums.MiApplyResult)ApplyResult.Value;
+
+            return MiEnums.MiApplyResult.Unknown;
+        }
     }
 }
