@@ -4,6 +4,7 @@ using GuerrillaNtp;
 using HOSUnlock.Configuration;
 using HOSUnlock.Constants;
 using HOSUnlock.Models.Common;
+using Polly;
 using System.Collections.Concurrent;
 
 namespace HOSUnlock.Services;
@@ -11,6 +12,7 @@ namespace HOSUnlock.Services;
 public sealed class ClockProvider : IDisposable
 {
     private const string ShanghaiTimeZoneId = "Asia/Shanghai";
+    private const int MaxRetryAttempts = 5;
 
     private readonly NtpClient _ntpClient;
     private readonly TimeZoneInfo _beijingTimeZone;
@@ -18,9 +20,11 @@ public sealed class ClockProvider : IDisposable
     private readonly AppConfiguration _config;
     private readonly SemaphoreSlim _thresholdLoopSemaphore = new(1, 1);
     private readonly ConcurrentDictionary<TokenShiftDefinition, (DateTime Threshold, bool Flagged)> _requestTimeThresholds;
+    private readonly ResiliencePipeline _ntpRetryPipeline;
 
     private Timer? _timer;
     private bool _disposed;
+    private int _attemptCount;
 
     public DateTime UtcNow { get; private set; }
 
@@ -30,8 +34,15 @@ public sealed class ClockProvider : IDisposable
 
     public static ClockProvider? Instance { get; private set; }
 
+    public int AttemptCount => _attemptCount;
+
+    public int RemainingAttempts => MaxRetryAttempts - _attemptCount;
+
+    public bool CanRetry => _attemptCount < MaxRetryAttempts;
+
     public event EventHandler<ClockThresholdExceededArgs>? OnClockThresholdExceeded;
     public event EventHandler? OnAllThresholdsReached;
+    public event EventHandler? OnMaxRetriesReached;
 
     private ClockProvider(AppConfiguration config)
     {
@@ -44,6 +55,8 @@ public sealed class ClockProvider : IDisposable
         {
             Timeout = TimeSpan.FromSeconds(5)
         };
+
+        _ntpRetryPipeline = ResiliencePolicies.CreateSyncRetryPipeline("NTP Query");
     }
 
     private static readonly SemaphoreSlim _initLock = new(1, 1);
@@ -242,7 +255,7 @@ public sealed class ClockProvider : IDisposable
 
     private DateTime GetUtcTime()
     {
-        var response = _ntpClient.Query();
+        var response = _ntpRetryPipeline.Execute(() => _ntpClient.Query());
         return response.UtcNow.UtcDateTime;
     }
 
@@ -254,6 +267,72 @@ public sealed class ClockProvider : IDisposable
         _disposed = true;
         _timer?.Dispose();
         _thresholdLoopSemaphore.Dispose();
+    }
+
+    public async Task<bool> ResetAndRestartAsync()
+    {
+        await _thresholdLoopSemaphore.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            _attemptCount++;
+
+            if (_attemptCount >= MaxRetryAttempts)
+            {
+                Logger.LogWarning("Maximum retry attempts ({0}) reached. Please restart the application.", MaxRetryAttempts);
+                OnMaxRetriesReached?.Invoke(this, EventArgs.Empty);
+                return false;
+            }
+
+            Logger.LogInfo("Resetting for attempt {0} of {1}...", _attemptCount + 1, MaxRetryAttempts);
+
+            // Update current time from NTP
+            var originalUtcTime = GetUtcTime();
+            UtcNow = new DateTime(
+                originalUtcTime.Year,
+                originalUtcTime.Month,
+                originalUtcTime.Day,
+                originalUtcTime.Hour,
+                originalUtcTime.Minute,
+                originalUtcTime.Second,
+                originalUtcTime.Millisecond,
+                DateTimeKind.Utc);
+
+            // Clear and reinitialize thresholds
+            _requestTimeThresholds.Clear();
+            InitializeThresholds();
+
+            Logger.LogInfo(
+                "Thresholds reset. NTP time: {0} (Beijing Time: {1})",
+                UtcNow.ToString("yyyy-MM-dd HH:mm:ss"),
+                BeijingNow.ToString("yyyy-MM-dd HH:mm:ss"));
+
+            // Restart the timer
+            _timer?.Change(TimeSpan.Zero, TimeSpan.FromMilliseconds(NtpConstants.NtpRefreshIntervalMilliseconds));
+
+            return true;
+        }
+        finally
+        {
+            _thresholdLoopSemaphore.Release();
+        }
+    }
+
+    public void Stop()
+    {
+        _timer?.Change(Timeout.Infinite, Timeout.Infinite);
+        Logger.LogInfo("ClockProvider timer stopped.");
+    }
+
+    public void Resume()
+    {
+        if (!CanRetry)
+        {
+            Logger.LogWarning("Cannot resume: maximum retry attempts reached.");
+            return;
+        }
+
+        _timer?.Change(TimeSpan.Zero, TimeSpan.FromMilliseconds(NtpConstants.NtpRefreshIntervalMilliseconds));
+        Logger.LogInfo("ClockProvider timer resumed.");
     }
 
     public sealed class ClockThresholdExceededArgs(

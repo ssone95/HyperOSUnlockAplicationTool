@@ -7,69 +7,74 @@ namespace HOSUnlock.Views;
 
 public partial class MainView : Terminal.Gui.Window, IDisposable
 {
-    private TitledPanel topLeftPanel;
-    private TitledPanel topRightPanel;
-    private TitledPanel bottomLeftPanel;
-    private TitledPanel bottomRightPanel;
+    // Log panels for different purposes
+    private LogPanel _statusPanel = null!;
+    private LogPanel _thresholdsPanel = null!;
+    private LogPanel _applicationLogsPanel = null!;
+    private LogPanel _requestResultsPanel = null!;
 
-    private TitledPanel bottomOptionsPanel;
+    // Options panel (bottom bar)
+    private FrameView _optionsPanel = null!;
 
     private void InitializeComponent()
     {
-        this.Width = Dim.Fill(0);
-        this.Height = Dim.Fill(0);
-        this.X = 0;
-        this.Y = 0;
-        this.Modal = false;
-        this.Text = "";
-        this.Border.BorderStyle = Terminal.Gui.BorderStyle.Single;
-        this.Border.Effect3D = false;
-        this.Border.DrawMarginFrame = true;
-        this.TextAlignment = Terminal.Gui.TextAlignment.Left;
-        this.Title = "HOSUnlock - Ctrl+Q to quit";
+        Width = Dim.Fill();
+        Height = Dim.Fill();
+        X = 0;
+        Y = 0;
+        Modal = false;
+        Border.BorderStyle = BorderStyle.Single;
+        Border.Effect3D = false;
+        Border.DrawMarginFrame = true;
+        TextAlignment = TextAlignment.Left;
+        Title = "HOSUnlock - Ctrl+Q to quit";
 
-        // Create four equal panels in a 2x2 grid
-        topLeftPanel = new TitledPanel("Panel 1")
+        // Top-Left: Status & Configuration
+        _statusPanel = new LogPanel("Status & Configuration")
         {
             X = 0,
             Y = 0,
             Width = Dim.Percent(50),
-            Height = Dim.Percent(50) - 3,
+            Height = Dim.Percent(50) - 1
         };
 
-        topRightPanel = new TitledPanel("Panel 2")
+        // Top-Right: Threshold Times
+        _thresholdsPanel = new LogPanel("Threshold Times")
         {
-            X = Pos.Right(topLeftPanel),
+            X = Pos.Right(_statusPanel),
             Y = 0,
-            Width = Dim.Fill(0),
-            Height = Dim.Percent(50) - 3
+            Width = Dim.Fill(),
+            Height = Dim.Percent(50) - 1
         };
 
-        bottomLeftPanel = new TitledPanel("Panel 3")
+        // Bottom-Left: Application Logs
+        _applicationLogsPanel = new LogPanel("Application Logs")
         {
             X = 0,
-            Y = Pos.Bottom(topLeftPanel),
+            Y = Pos.Bottom(_statusPanel),
             Width = Dim.Percent(50),
-            Height = Dim.Fill(0) - 3
+            Height = Dim.Fill() - 3
         };
 
-        bottomRightPanel = new TitledPanel("Panel 4")
+        // Bottom-Right: Request Results
+        _requestResultsPanel = new LogPanel("Request Results")
         {
-            X = Pos.Right(bottomLeftPanel),
-            Y = Pos.Bottom(topRightPanel),
-            Width = Dim.Fill(0),
-            Height = Dim.Fill(0) - 3
+            X = Pos.Right(_applicationLogsPanel),
+            Y = Pos.Bottom(_thresholdsPanel),
+            Width = Dim.Fill(),
+            Height = Dim.Fill() - 3
         };
 
-        bottomOptionsPanel = new TitledPanel("Options")
+        // Bottom: Options Bar
+        _optionsPanel = new FrameView("Options")
         {
             X = 0,
-            Y = Pos.Bottom(bottomLeftPanel),
-            Width = Dim.Fill(0),
-            Height = 3
+            Y = Pos.Bottom(_applicationLogsPanel),
+            Width = Dim.Fill(),
+            Height = 3,
+            Border = { BorderStyle = BorderStyle.Single }
         };
 
-        // Add panels to the main view
-        Add(topLeftPanel, topRightPanel, bottomLeftPanel, bottomRightPanel, bottomOptionsPanel);
+        Add(_statusPanel, _thresholdsPanel, _applicationLogsPanel, _requestResultsPanel, _optionsPanel);
     }
 }

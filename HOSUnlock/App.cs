@@ -5,7 +5,7 @@ using Terminal.Gui;
 
 namespace HOSUnlock;
 
-public class App
+public sealed class App
 {
     public async Task Run(string[] args)
     {
@@ -14,38 +14,50 @@ public class App
             Logger.InitializeLogger("UI", logToConsoleToo: false);
             await AppConfiguration.LoadAsync().ConfigureAwait(false);
         }
-        catch
+        catch (Exception ex)
         {
-            // Configuration loading errors will be handled after UI init
+            // Log but continue - UI will handle showing the error
+            Console.Error.WriteLine($"Configuration loading error: {ex.Message}");
         }
 
         Application.Init();
 
         try
         {
-            Logger.LogInfo("Application started.");
+            Logger.LogInfo("TUI Application started.");
 
-            if (AppConfiguration.Instance is null || !AppConfiguration.Instance.IsConfigurationValid())
-            {
-                throw new InvalidOperationException(
-                    "Application configuration is invalid. Please check whether the appsettings.json file is valid and present in the same directory as the main program.");
-            }
-
+            // Handle --auto-run argument
             if (args.Any(y => string.Equals(y, "--auto-run", StringComparison.OrdinalIgnoreCase)))
             {
-                AppConfiguration.Instance.AutoRunOnStart = true;
+                if (AppConfiguration.Instance is not null)
+                {
+                    AppConfiguration.Instance.AutoRunOnStart = true;
+                }
             }
 
-            await ClockProvider.InitializeAsync().ConfigureAwait(false);
+            // Initialize ClockProvider if configuration is valid
+            if (AppConfiguration.Instance?.IsConfigurationValid() == true)
+            {
+                try
+                {
+                    await ClockProvider.InitializeAsync().ConfigureAwait(false);
+                    Logger.LogInfo("ClockProvider initialized successfully.");
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError("Failed to initialize ClockProvider.", ex);
+                    // Continue anyway - MainView will show the error
+                }
+            }
 
+            // Run the main view
             Application.Run(new MainView(), ex =>
             {
                 Logger.LogError("Unhandled exception in application loop.", ex);
-                return false;
+                return false; // Don't suppress the exception
             });
 
-            ClockProvider.DisposeInstance();
-            Logger.LogInfo("Application exited.");
+            Logger.LogInfo("Application exited normally.");
         }
         catch (Exception ex)
         {
@@ -54,6 +66,7 @@ public class App
         }
         finally
         {
+            ClockProvider.DisposeInstance();
             Logger.DisposeLogger();
             Application.Shutdown();
         }

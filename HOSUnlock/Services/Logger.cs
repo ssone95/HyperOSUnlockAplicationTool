@@ -8,6 +8,7 @@ public sealed class Logger : IDisposable
     private readonly StreamWriter _logStreamWriter;
     private readonly string _prefix;
     private readonly bool _logToConsoleToo;
+    private readonly object _writeLock = new();
     private bool _disposed;
 
     private Logger(string prefix, bool logToConsoleToo)
@@ -100,7 +101,13 @@ public sealed class Logger : IDisposable
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
         var logMessage = $"{timestamp} {message}";
 
-        _logStreamWriter.WriteLine(logMessage);
+        lock (_writeLock)
+        {
+            if (_disposed)
+                return;
+
+            _logStreamWriter.WriteLine(logMessage);
+        }
 
         if (_logToConsoleToo)
             Console.WriteLine(logMessage);

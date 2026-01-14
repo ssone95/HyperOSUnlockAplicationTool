@@ -2,6 +2,7 @@
 using HOSUnlock.Exceptions;
 using HOSUnlock.Models;
 using HOSUnlock.Models.Base;
+using Polly;
 using System.Text;
 using System.Text.Json;
 
@@ -16,6 +17,7 @@ public sealed class MiDataService : IDisposable
 
     private readonly HttpClient _httpClient;
     private readonly CancellationToken _cancellationToken;
+    private readonly ResiliencePipeline _apiRetryPipeline;
     private bool _disposed;
 
     public MiDataService(string cookieValue, CancellationToken cancellationToken)
@@ -34,6 +36,8 @@ public sealed class MiDataService : IDisposable
         _httpClient.DefaultRequestHeaders.Add(
             MiDataConstants.CookieHeaderKey,
             MiDataConstants.GetCookieValue(cookieValue, deviceId));
+
+        _apiRetryPipeline = ResiliencePolicies.CreateAsyncRetryPipeline("Mi API Request");
     }
 
     public Task<BaseResponse<BlCheckResponseDto>> GetStatusCheckResultAsync()
@@ -55,27 +59,30 @@ public sealed class MiDataService : IDisposable
     {
         try
         {
-            using var requestMessage = new HttpRequestMessage(method, MiDataConstants.FormatFullUrl(endpoint));
-
-            requestMessage.Headers.Add("Accept", "application/json");
-
-            if (method == HttpMethod.Post)
+            return await _apiRetryPipeline.ExecuteAsync(async cancellationToken =>
             {
-                requestMessage.Headers.Add("Accept-Encoding", "gzip, deflate, br");
-                requestMessage.Headers.Add("User-Agent", "okhttp/4.12.0");
-                requestMessage.Headers.Add("Connection", "keep-alive");
+                using var requestMessage = new HttpRequestMessage(method, MiDataConstants.FormatFullUrl(endpoint));
 
-                var bodyContent = jsonBody ?? "{}";
-                requestMessage.Content = new StringContent(bodyContent, Encoding.UTF8, "application/json");
-            }
+                requestMessage.Headers.Add("Accept", "application/json");
 
-            using var response = await _httpClient.SendAsync(requestMessage, _cancellationToken).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+                if (method == HttpMethod.Post)
+                {
+                    requestMessage.Headers.Add("Accept-Encoding", "gzip, deflate, br");
+                    requestMessage.Headers.Add("User-Agent", "okhttp/4.12.0");
+                    requestMessage.Headers.Add("Connection", "keep-alive");
 
-            var responseContent = await response.Content.ReadAsStringAsync(_cancellationToken).ConfigureAwait(false);
+                    var bodyContent = jsonBody ?? "{}";
+                    requestMessage.Content = new StringContent(bodyContent, Encoding.UTF8, "application/json");
+                }
 
-            return JsonSerializer.Deserialize<BaseResponse<TOut>>(responseContent, JsonOptions)
-                ?? throw new MiException("Failed to deserialize API response.", MiDataConstants.STATUS_CODE_OTHER_FAILURE);
+                using var response = await _httpClient.SendAsync(requestMessage, cancellationToken).ConfigureAwait(false);
+                response.EnsureSuccessStatusCode();
+
+                var responseContent = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+                return JsonSerializer.Deserialize<BaseResponse<TOut>>(responseContent, JsonOptions)
+                    ?? throw new MiException("Failed to deserialize API response.", MiDataConstants.STATUS_CODE_OTHER_FAILURE);
+            }, _cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (_cancellationToken.IsCancellationRequested)
         {
