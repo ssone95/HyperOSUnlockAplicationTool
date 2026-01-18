@@ -1,10 +1,10 @@
-# HyperOSUnlocker (HOSUnlocker)
+﻿# HyperOSUnlocker (HOSUnlocker)
 
 A cross-platform .NET console application designed to automate the timing-critical process of applying for Xiaomi/HyperOS bootloader unlock permissions.
 
 ---
 
-## ?? Disclaimer
+## ⚠️ Disclaimer
 
 > **IMPORTANT: Please read carefully before using this software.**
 
@@ -20,7 +20,7 @@ A cross-platform .NET console application designed to automate the timing-critic
 
 ---
 
-## ?? What is HOSUnlocker?
+## 📖 What is HOSUnlocker?
 
 HOSUnlocker is a tool that helps automate the process of applying for Xiaomi/HyperOS bootloader unlock permissions at precise server-side timing windows. The Xiaomi unlock system operates on Beijing time, and this tool monitors clock thresholds to submit unlock requests at optimal moments.
 
@@ -36,7 +36,7 @@ HOSUnlocker is a tool that helps automate the process of applying for Xiaomi/Hyp
 
 ---
 
-## ?? Why Does This Exist?
+## 🤔 Why Does This Exist?
 
 Xiaomi's bootloader unlock system requires:
 1. Waiting a specific period (often 7+ days) after binding your device
@@ -50,7 +50,7 @@ This tool automates the tedious process of manually checking and submitting requ
 
 ---
 
-## ?? Quick Start
+## 🚀 Quick Start
 
 ### Prerequisites
 
@@ -100,7 +100,7 @@ dotnet run --project HOSUnlocker
 
 ---
 
-## ?? Usage
+## 💻 Usage
 
 ### Operation Modes
 
@@ -159,7 +159,7 @@ HOSUnlocker --headless --api-retry-wait 200 --fixed-retry-wait
 
 ---
 
-## ??? Platform-Specific Instructions
+## 🖥️ Platform-Specific Instructions
 
 ### Windows
 
@@ -205,7 +205,7 @@ nohup ./HOSUnlocker --headless --auto-run > hosunlocker.log 2>&1 &
 
 ---
 
-## ?? Docker
+## 🐳 Docker
 
 HOSUnlocker includes Docker support for containerized deployment, ideal for running on servers or NAS devices.
 
@@ -251,7 +251,7 @@ services:
 
 ---
 
-## ?? Configuration Reference
+## ⚙️ Configuration Reference
 
 ### Configuration File (`appsettings.json`)
 
@@ -276,7 +276,7 @@ Token shifts define the time offsets (in milliseconds) around the target unlock 
 
 ---
 
-## ?? Troubleshooting
+## 🔧 Troubleshooting
 
 ### Common Issues
 
@@ -297,13 +297,13 @@ HOSUnlocker --headless --auto-run > hosunlocker.log 2>&1
 
 ---
 
-## ?? License
+## 📄 License
 
 This project is provided for personal and educational use. See the [LICENSE](../LICENSE) file for details.
 
 ---
 
-## ?? Acknowledgments
+## 🙏 Acknowledgments
 
 This project uses the following open-source libraries:
 - [Terminal.Gui](https://github.com/gui-cs/Terminal.Gui) - Terminal UI toolkit
