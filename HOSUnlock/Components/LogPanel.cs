@@ -10,12 +10,12 @@ namespace HOSUnlock.Components;
 /// </summary>
 public sealed class LogPanel : FrameView
 {
+    private const string TimeFormat = "HH:mm:ss.fff";
     private readonly ListView _listView;
     private readonly List<string> _entries = [];
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly int _maxEntries;
     private readonly string _panelName;
-    private bool _autoScroll = true;
 
     public LogPanel(string title, int maxEntries = 500)
     {
@@ -42,11 +42,7 @@ public sealed class LogPanel : FrameView
     /// <summary>
     /// Gets or sets whether the log automatically scrolls to the bottom when new entries are added.
     /// </summary>
-    public bool AutoScroll
-    {
-        get => _autoScroll;
-        set => _autoScroll = value;
-    }
+    public bool AutoScroll { get; }
 
     /// <summary>
     /// Appends a log message with timestamp. Thread-safe.
@@ -54,7 +50,7 @@ public sealed class LogPanel : FrameView
     /// </summary>
     public void Log(string message)
     {
-        var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
+        var timestamp = DateTime.Now.ToString(TimeFormat);
         var entry = $"[{timestamp}] {message}";
 
         Logger.LogInfo($"[{_panelName}] {message}");
@@ -78,7 +74,7 @@ public sealed class LogPanel : FrameView
     /// </summary>
     public void LogInfo(string message)
     {
-        var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
+        var timestamp = DateTime.Now.ToString(TimeFormat);
         var entry = $"[{timestamp}] [INF] {message}";
 
         Logger.LogInfo($"[{_panelName}] {message}");
@@ -91,7 +87,7 @@ public sealed class LogPanel : FrameView
     /// </summary>
     public void LogWarning(string message)
     {
-        var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
+        var timestamp = DateTime.Now.ToString(TimeFormat);
         var entry = $"[{timestamp}] [WRN] {message}";
 
         Logger.LogWarning($"[{_panelName}] {message}");
@@ -104,7 +100,7 @@ public sealed class LogPanel : FrameView
     /// </summary>
     public void LogError(string message)
     {
-        var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
+        var timestamp = DateTime.Now.ToString(TimeFormat);
         var entry = $"[{timestamp}] [ERR] {message}";
 
         Logger.LogError($"[{_panelName}] {message}");
@@ -115,7 +111,7 @@ public sealed class LogPanel : FrameView
     /// <summary>
     /// Clears all log entries. Thread-safe.
     /// </summary>
-    public void Clear()
+    public new void Clear()
     {
         if (Application.MainLoop is null)
         {
@@ -166,7 +162,7 @@ public sealed class LogPanel : FrameView
 
         _listView.SetSource(snapshot);
 
-        if (_autoScroll && count > 0)
+        if (AutoScroll && count > 0)
         {
             _listView.SelectedItem = count - 1;
             _listView.TopItem = Math.Max(0, count - _listView.Bounds.Height);

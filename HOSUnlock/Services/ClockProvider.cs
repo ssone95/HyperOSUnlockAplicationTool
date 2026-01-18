@@ -1,5 +1,3 @@
-//#define DBG
-
 using GuerrillaNtp;
 using HOSUnlock.Configuration;
 using HOSUnlock.Constants;
@@ -22,7 +20,7 @@ public interface IClockProvider : IDisposable
     bool CanRetry { get; }
     int MaxRetryAttempts { get; }
 
-    event EventHandler<ClockProvider.ClockThresholdExceededArgs>? OnClockThresholdExceeded;
+    event EventHandler<ClockProvider.ClockThresholdExceededEventArgs>? OnClockThresholdExceeded;
     event EventHandler? OnAllThresholdsReached;
     event EventHandler? OnMaxRetriesReached;
 
@@ -37,7 +35,7 @@ public interface IClockProvider : IDisposable
 public sealed class ClockProvider : IClockProvider
 {
     private const string ShanghaiTimeZoneId = "Asia/Shanghai";
-
+    private const string DateTimeFormat = "yyyy-MM-dd HH:mm:ss.fff";
     private readonly int _maxRetryAttempts;
     private readonly NtpClient _ntpClient;
     private readonly TimeZoneInfo _beijingTimeZone;
@@ -67,7 +65,7 @@ public sealed class ClockProvider : IClockProvider
 
     public int MaxRetryAttempts => _maxRetryAttempts;
 
-    public event EventHandler<ClockThresholdExceededArgs>? OnClockThresholdExceeded;
+    public event EventHandler<ClockThresholdExceededEventArgs>? OnClockThresholdExceeded;
     public event EventHandler? OnAllThresholdsReached;
     public event EventHandler? OnMaxRetriesReached;
 
@@ -117,8 +115,8 @@ public sealed class ClockProvider : IClockProvider
 
             Logger.LogInfo(
                 "Initial NTP time obtained: {0} (Beijing Time: {1})",
-                instance.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"),
-                instance.BeijingNow.ToString("yyyy-MM-dd HH:mm:ss"));
+                instance.UtcNow.ToString(DateTimeFormat),
+                instance.BeijingNow.ToString(DateTimeFormat));
 
             instance._timer = new Timer(
                 instance.ProcessThresholdsCallback,
@@ -170,10 +168,16 @@ public sealed class ClockProvider : IClockProvider
         }
     }
 
-    private void ProcessThresholdsCallback(object? state)
+    private async void ProcessThresholdsCallback(object? state)
     {
-        // Fire and forget with proper error handling
-        _ = ProcessThresholdsAsync();
+        try
+        {
+            await ProcessThresholdsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError("Error in ClockProvider threshold processing: {0}", ex, ex.Message);
+        }
     }
 
     private async Task ProcessThresholdsAsync()
@@ -238,11 +242,7 @@ public sealed class ClockProvider : IClockProvider
         if (!_requestTimeThresholds.TryGetValue(tokenShiftDefinition, out var threshold))
             return;
 
-#if DBG
-        var shouldTrigger = (BeijingNow >= threshold.Threshold || BeijingNow.Second == 0) && !threshold.Flagged;
-#else
         var shouldTrigger = BeijingNow >= threshold.Threshold && !threshold.Flagged;
-#endif
 
         if (!shouldTrigger)
             return;
@@ -255,7 +255,7 @@ public sealed class ClockProvider : IClockProvider
             $"\tUTC Time: {UtcNow:yyyy-MM-dd HH:mm:ss.fff}\n" +
             $"\tLocal Time: {LocalNow:yyyy-MM-dd HH:mm:ss.fff}");
 
-        OnClockThresholdExceeded?.Invoke(this, new ClockThresholdExceededArgs(
+        OnClockThresholdExceeded?.Invoke(this, new ClockThresholdExceededEventArgs(
             tokenShiftDefinition,
             UtcNow,
             BeijingNow));
@@ -331,8 +331,8 @@ public sealed class ClockProvider : IClockProvider
 
             Logger.LogInfo(
                 "Thresholds reset. NTP time: {0} (Beijing Time: {1})",
-                UtcNow.ToString("yyyy-MM-dd HH:mm:ss"),
-                BeijingNow.ToString("yyyy-MM-dd HH:mm:ss"));
+                UtcNow.ToString(DateTimeFormat),
+                BeijingNow.ToString(DateTimeFormat));
 
             // Restart the timer
             _timer?.Change(TimeSpan.Zero, TimeSpan.FromMilliseconds(NtpConstants.NtpRefreshIntervalMilliseconds));
@@ -363,7 +363,7 @@ public sealed class ClockProvider : IClockProvider
         Logger.LogInfo("ClockProvider timer resumed.");
     }
 
-    public sealed class ClockThresholdExceededArgs(
+    public sealed class ClockThresholdExceededEventArgs(
         TokenShiftDefinition tokenShiftDetails,
         DateTime utcTime,
         DateTime beijingTime) : EventArgs

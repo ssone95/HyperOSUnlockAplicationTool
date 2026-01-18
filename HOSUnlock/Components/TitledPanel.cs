@@ -1,4 +1,3 @@
-using System;
 using Terminal.Gui;
 
 namespace HOSUnlock.Components;
@@ -15,7 +14,7 @@ public class TitledPanel : FrameView
         this.Title = title;
         this.Border.BorderStyle = BorderStyle.Single;
         this.Border.Effect3D = false;
-        
+
         // Create a content view that fills the panel
         contentView = new View()
         {
@@ -24,7 +23,7 @@ public class TitledPanel : FrameView
             Width = Dim.Fill(0),
             Height = Dim.Fill(0)
         };
-        
+
         Add(contentView);
     }
 

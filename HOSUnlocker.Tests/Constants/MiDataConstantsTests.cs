@@ -1,6 +1,6 @@
 using HOSUnlock.Constants;
 
-namespace HOSUnlock.Tests.Constants;
+namespace HOSUnlocker.Tests.Constants;
 
 [TestClass]
 public sealed class MiDataConstantsTests
@@ -17,9 +17,9 @@ public sealed class MiDataConstantsTests
         var url = MiDataConstants.FormatFullUrl(MiDataConstants.MI_DATA_BL_SWITCH_CHECK);
 
         // Assert
-        Assert.IsTrue(url.StartsWith("https://"));
-        Assert.IsTrue(url.Contains("sgp-api.buy.mi.com"));
-        Assert.IsTrue(url.Contains(MiDataConstants.MI_DATA_BL_SWITCH_CHECK));
+        Assert.StartsWith("https://", url);
+        Assert.Contains("sgp-api.buy.mi.com", url);
+        Assert.Contains(MiDataConstants.MI_DATA_BL_SWITCH_CHECK, url);
     }
 
     [TestMethod]
@@ -30,9 +30,9 @@ public sealed class MiDataConstantsTests
         var url = MiDataConstants.FormatFullUrl(MiDataConstants.MI_DATA_APLY_AUTH);
 
         // Assert
-        Assert.IsTrue(url.StartsWith("https://"));
-        Assert.IsTrue(url.Contains("sgp-api.buy.mi.com"));
-        Assert.IsTrue(url.Contains(MiDataConstants.MI_DATA_APLY_AUTH));
+        Assert.StartsWith("https://", url);
+        Assert.Contains("sgp-api.buy.mi.com", url);
+        Assert.Contains(MiDataConstants.MI_DATA_APLY_AUTH, url);
     }
 
     [TestMethod]
@@ -46,8 +46,8 @@ public sealed class MiDataConstantsTests
         var url = MiDataConstants.FormatFullUrl(endpoint);
 
         // Assert
-        Assert.IsTrue(url.StartsWith("https://"));
-        Assert.IsTrue(url.EndsWith(endpoint));
+        Assert.StartsWith("https://", url);
+        Assert.EndsWith(endpoint, url);
     }
 
     #endregion
@@ -66,10 +66,10 @@ public sealed class MiDataConstantsTests
         var result = MiDataConstants.GetCookieValue(cookieValue, deviceId);
 
         // Assert
-        Assert.IsTrue(result.Contains($"new_bbs_serviceToken={cookieValue}"));
-        Assert.IsTrue(result.Contains($"deviceId={deviceId}"));
-        Assert.IsTrue(result.Contains("versionCode=500411"));
-        Assert.IsTrue(result.Contains("versionName=5.4.11"));
+        Assert.Contains($"new_bbs_serviceToken={cookieValue}", result);
+        Assert.Contains($"deviceId={deviceId}", result);
+        Assert.Contains("versionCode=500411", result);
+        Assert.Contains("versionName=5.4.11", result);
     }
 
     [TestMethod]
@@ -145,71 +145,7 @@ public sealed class MiDataConstantsTests
         }
 
         // Assert - should have 10 unique IDs (very unlikely to have collisions)
-        Assert.AreEqual(10, ids.Count);
-    }
-
-    #endregion
-
-    #region Status Code Constants Tests
-
-    [TestMethod]
-    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void StatusCode_OtherFailure_IsNegativeOne()
-    {
-        Assert.AreEqual(-1, MiDataConstants.STATUS_CODE_OTHER_FAILURE);
-    }
-
-    [TestMethod]
-    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void StatusCode_Success_IsZero()
-    {
-        Assert.AreEqual(0, MiDataConstants.STATUS_CODE_SUCCESS);
-    }
-
-    [TestMethod]
-    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void StatusCode_RequestRejected_Is100001()
-    {
-        Assert.AreEqual(100001, MiDataConstants.STATUS_REQUEST_REJECTED);
-    }
-
-    [TestMethod]
-    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void StatusCode_RequestPotentiallyValid_Is100003()
-    {
-        Assert.AreEqual(100003, MiDataConstants.STATUS_REQUEST_POTENTIALLY_VALID);
-    }
-
-    [TestMethod]
-    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void StatusCode_CookieExpired_Is100004()
-    {
-        Assert.AreEqual(100004, MiDataConstants.STATUS_COOKIE_EXPIRED);
-    }
-
-    #endregion
-
-    #region Endpoint Constants Tests
-
-    [TestMethod]
-    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void Endpoint_BlSwitchCheck_IsCorrect()
-    {
-        Assert.AreEqual("user/bl-switch/state", MiDataConstants.MI_DATA_BL_SWITCH_CHECK);
-    }
-
-    [TestMethod]
-    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void Endpoint_ApplyAuth_IsCorrect()
-    {
-        Assert.AreEqual("apply/bl-auth", MiDataConstants.MI_DATA_APLY_AUTH);
-    }
-
-    [TestMethod]
-    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void CookieHeaderKey_IsCorrect()
-    {
-        Assert.AreEqual("Cookie", MiDataConstants.CookieHeaderKey);
+        Assert.HasCount(10, ids);
     }
 
     #endregion

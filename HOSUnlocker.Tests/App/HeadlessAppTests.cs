@@ -1,7 +1,8 @@
+using HOSUnlock;
 using HOSUnlock.Enums;
 using HOSUnlocker.Tests.Infrastructure;
 
-namespace HOSUnlock.Tests.App;
+namespace HOSUnlocker.Tests.App;
 
 [TestClass]
 public sealed class HeadlessAppTests

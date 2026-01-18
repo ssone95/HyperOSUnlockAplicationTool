@@ -1,7 +1,7 @@
 using HOSUnlock.Configuration;
 using HOSUnlock.Models.Common;
 
-namespace HOSUnlock.Tests.Models;
+namespace HOSUnlocker.Tests.Models;
 
 [TestClass]
 public sealed class TokenShiftDefinitionTests
@@ -229,7 +229,7 @@ public sealed class TokenShiftDefinitionTests
         var result = def1.CompareTo(null);
 
         // Assert
-        Assert.IsTrue(result > 0);
+        Assert.IsGreaterThan(0, result);
     }
 
     [TestMethod]
@@ -244,7 +244,7 @@ public sealed class TokenShiftDefinitionTests
         var result = def1.CompareTo(def2);
 
         // Assert
-        Assert.IsTrue(result < 0);
+        Assert.IsLessThan(0, result);
     }
 
     [TestMethod]
@@ -259,7 +259,7 @@ public sealed class TokenShiftDefinitionTests
         var result = def1.CompareTo(def2);
 
         // Assert
-        Assert.IsTrue(result > 0);
+        Assert.IsGreaterThan(0, result);
     }
 
     [TestMethod]
@@ -274,7 +274,7 @@ public sealed class TokenShiftDefinitionTests
         var result = def1.CompareTo(def2);
 
         // Assert
-        Assert.IsTrue(result < 0);
+        Assert.IsLessThan(0, result);
     }
 
     [TestMethod]
@@ -289,7 +289,7 @@ public sealed class TokenShiftDefinitionTests
         var result = def1.CompareTo(def2);
 
         // Assert
-        Assert.IsTrue(result < 0);
+        Assert.IsLessThan(0, result);
     }
 
     [TestMethod]
@@ -304,7 +304,7 @@ public sealed class TokenShiftDefinitionTests
         var result = def1.CompareTo(def2);
 
         // Assert
-        Assert.IsTrue(result < 0);
+        Assert.IsLessThan(0, result);
     }
 
     #endregion
@@ -485,7 +485,7 @@ public sealed class TokenInfoTests
         var result = info1.CompareTo(null);
 
         // Assert
-        Assert.IsTrue(result > 0);
+        Assert.IsGreaterThan(0, result);
     }
 
     [TestMethod]
@@ -500,7 +500,7 @@ public sealed class TokenInfoTests
         var result = info1.CompareTo(info2);
 
         // Assert
-        Assert.IsTrue(result < 0);
+        Assert.IsLessThan(0, result);
     }
 
     [TestMethod]
@@ -515,7 +515,7 @@ public sealed class TokenInfoTests
         var result = info1.CompareTo(info2);
 
         // Assert
-        Assert.IsTrue(result < 0);
+        Assert.IsLessThan(0, result);
     }
 
     #endregion

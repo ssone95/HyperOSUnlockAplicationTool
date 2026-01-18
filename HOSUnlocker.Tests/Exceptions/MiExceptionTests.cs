@@ -1,6 +1,6 @@
 using HOSUnlock.Exceptions;
 
-namespace HOSUnlock.Tests.Exceptions;
+namespace HOSUnlocker.Tests.Exceptions;
 
 [TestClass]
 public sealed class MiExceptionTests

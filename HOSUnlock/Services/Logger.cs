@@ -1,5 +1,3 @@
-using System;
-
 namespace HOSUnlock.Services;
 
 /// <summary>
@@ -31,7 +29,7 @@ public sealed class Logger : ILogger
     private readonly StreamWriter _logStreamWriter;
     private readonly string _prefix;
     private readonly bool _logToConsoleToo;
-    private readonly object _writeLock = new();
+    private readonly Lock _writeLock = new();
     private bool _disposed;
 
     private Logger(string prefix, bool logToConsoleToo)

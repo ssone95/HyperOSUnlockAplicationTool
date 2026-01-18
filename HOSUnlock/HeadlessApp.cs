@@ -5,19 +5,23 @@ using HOSUnlock.Models;
 using HOSUnlock.Models.Base;
 using HOSUnlock.Models.Common;
 using HOSUnlock.Services;
+using System.Diagnostics;
 
 namespace HOSUnlock;
 
 public static class HeadlessApp
 {
+    private const string SeparatorLine = "========================================";
     private static CancellationTokenSource? _cancellationTokenSource;
     private static bool _allThresholdsReached;
+#pragma warning disable CA1859 // Use concrete types when possible for improved performance
     private static IMiAuthRequestProcessor? _miAuthRequestProcessor;
+#pragma warning restore CA1859 // Use concrete types when possible for improved performance
     private static readonly SemaphoreSlim _applicationProcessingSemaphore = new(1, 1);
 
     // Track pending threshold operations
     private static int _pendingOperations;
-    private static readonly object _pendingOperationsLock = new();
+    private static readonly Lock _pendingOperationsLock = new();
     private static TaskCompletionSource _allOperationsCompleted = new();
 
     // Track if we should auto-retry
@@ -93,11 +97,11 @@ public static class HeadlessApp
             // Keep app open if not in auto-run mode
             if (!_autoRetryEnabled)
             {
-                Logger.LogInfo("========================================");
+                Logger.LogInfo(SeparatorLine);
                 Logger.LogInfo("Application process completed.");
                 Logger.LogInfo("Please check the status details above and proceed according to instructions.");
                 Logger.LogInfo("Press any key to terminate the application.");
-                Logger.LogInfo("========================================");
+                Logger.LogInfo(SeparatorLine);
                 Console.ReadKey();
             }
             else
@@ -105,12 +109,12 @@ public static class HeadlessApp
                 // In auto-run mode with max retries reached, also keep open but with different message
                 if (ClockProvider.Instance is not null && !ClockProvider.Instance.CanRetry)
                 {
-                    Logger.LogWarning("========================================");
+                    Logger.LogWarning(SeparatorLine);
                     Logger.LogWarning($"Maximum retry attempts reached ({ClockProvider.Instance.MaxRetryAttempts}).");
                     Logger.LogWarning("Token may have expired after multiple days of trying.");
                     Logger.LogWarning("Please restart the application to try again.");
                     Logger.LogWarning("Press any key to terminate the application.");
-                    Logger.LogWarning("========================================");
+                    Logger.LogWarning(SeparatorLine);
                     Console.ReadKey();
                 }
             }
@@ -137,55 +141,9 @@ public static class HeadlessApp
 
         while (!_cancellationTokenSource!.Token.IsCancellationRequested)
         {
-            if (!isFirstRun)
+            if (!isFirstRun || !(await TryReinitializeForRetry().ConfigureAwait(false)))
             {
-                // This is a retry - check if we can retry
-                if (ClockProvider.Instance is null || !ClockProvider.Instance.CanRetry)
-                {
-                    Logger.LogWarning($"Maximum retry attempts reached ({ClockProvider.Instance?.MaxRetryAttempts ?? 0}). Cannot retry.");
-                    break;
-                }
-
-                // Ask for confirmation if not in auto-run mode
-                if (!_autoRetryEnabled)
-                {
-                    Logger.LogInfo("========================================");
-                    Logger.LogInfo($"Would you like to retry? (Remaining attempts: {ClockProvider.Instance.RemainingAttempts})");
-                    Logger.LogInfo("The next attempt will wait for tomorrow's threshold window.");
-                    Logger.LogInfo("Press Enter to retry, or any other key to exit:");
-                    Logger.LogInfo("========================================");
-
-                    var key = Console.ReadKey();
-                    Console.WriteLine(); // New line after key press
-
-                    if (key.Key != ConsoleKey.Enter)
-                    {
-                        Logger.LogInfo("Retry declined by user.");
-                        break;
-                    }
-
-                    Logger.LogInfo("Retry confirmed by user.");
-                }
-                else
-                {
-                    Logger.LogInfo("Auto-run mode: Automatically retrying...");
-                }
-
-                Logger.LogInfo("Preparing for retry attempt {0} of {1}...",
-                    ClockProvider.Instance.AttemptCount + 1,
-                    ClockProvider.Instance.MaxRetryAttempts);
-
-                var restarted = await ClockProvider.Instance.ResetAndRestartAsync().ConfigureAwait(false);
-                if (!restarted)
-                {
-                    Logger.LogWarning("Failed to restart. Maximum retries reached.");
-                    break;
-                }
-
-                // Reset operation tracking for new attempt
-                _allOperationsCompleted = new TaskCompletionSource();
-                _allThresholdsReached = false;
-                _pendingOperations = 0;
+                break;
             }
 
             isFirstRun = false;
@@ -197,22 +155,11 @@ public static class HeadlessApp
 
             var preCheckResults = await _miAuthRequestProcessor.StartAsync().ConfigureAwait(false);
 
-            if (!await VerifyAllPreCheckResults(preCheckResults).ConfigureAwait(false))
-            {
-                // Pre-check failed - don't retry for approval/rejection states
-                break;
-            }
+            bool canMonitor = await CanProceedWithMonitoring(preCheckResults).ConfigureAwait(false);
 
-            if (!_autoRetryEnabled)
+            if (!canMonitor)
             {
-                Logger.LogInfo("Press Enter to continue monitoring the clock thresholds \nor any other key to exit:");
-                var key = Console.ReadKey();
-                Console.WriteLine(); // New line after key press
-                if (key.Key != ConsoleKey.Enter)
-                {
-                    Logger.LogInfo("Non-Enter key pressed. Exiting monitoring.");
-                    break;
-                }
+                break;
             }
 
             // Subscribe to clock events
@@ -221,19 +168,7 @@ public static class HeadlessApp
 
             DisplayThresholdTimes();
 
-            Logger.LogInfo("Monitoring clock thresholds... (Attempt {0} of {1})",
-                ClockProvider.Instance.AttemptCount + 1,
-                ClockProvider.Instance.MaxRetryAttempts);
-
-            if (_autoRetryEnabled)
-            {
-                Logger.LogInfo("Auto-run mode: Application will automatically retry if needed (up to {0} attempts).",
-                    ClockProvider.Instance.MaxRetryAttempts);
-            }
-            else
-            {
-                Logger.LogInfo("You will be prompted before any retry attempt.");
-            }
+            LogInfoAfterThresholdTimes();
 
             await MonitorThresholdsAsync().ConfigureAwait(false);
 
@@ -242,15 +177,9 @@ public static class HeadlessApp
             await _allOperationsCompleted.Task.ConfigureAwait(false);
 
             Logger.LogInfo("All operations completed for this attempt!");
-
-            // Unsubscribe from events before potential retry
-            ClockProvider.Instance.OnClockThresholdExceeded -= OnClockThresholdExceeded;
-            ClockProvider.Instance.OnAllThresholdsReached -= OnAllThresholdsReached;
-
-            // Check if we can/should retry
-            if (!ClockProvider.Instance.CanRetry)
+            bool canContinueAfterReinitialization = ReinitializeClockProvider();
+            if (!canContinueAfterReinitialization)
             {
-                Logger.LogWarning("No more retry attempts available.");
                 break;
             }
 
@@ -263,6 +192,118 @@ public static class HeadlessApp
             }
             // Loop continues - either auto-retry or ask user
         }
+    }
+
+    private static void LogInfoAfterThresholdTimes()
+    {
+        Debug.Assert(ClockProvider.Instance is not null, "ClockProvider.Instance should not be null here.");
+
+        Logger.LogInfo("Monitoring clock thresholds... (Attempt {0} of {1})",
+            ClockProvider.Instance.AttemptCount + 1,
+            ClockProvider.Instance.MaxRetryAttempts);
+
+        if (_autoRetryEnabled)
+        {
+            Logger.LogInfo("Auto-run mode: Application will automatically retry if needed (up to {0} attempts).",
+                ClockProvider.Instance.MaxRetryAttempts);
+        }
+        else
+        {
+            Logger.LogInfo("You will be prompted before any retry attempt.");
+        }
+    }
+
+    private static async Task<bool> CanProceedWithMonitoring(Dictionary<TokenInfo, BaseResponse<BlCheckResponseDto>> preCheckResults)
+    {
+        if (!await VerifyAllPreCheckResults(preCheckResults).ConfigureAwait(false))
+        {
+            // Pre-check failed - don't retry for approval/rejection states
+            return false;
+        }
+
+        if (!_autoRetryEnabled)
+        {
+            Logger.LogInfo("Press Enter to continue monitoring the clock thresholds \nor any other key to exit:");
+            var key = Console.ReadKey();
+            Console.WriteLine(); // New line after key press
+            if (key.Key != ConsoleKey.Enter)
+            {
+                Logger.LogInfo("Non-Enter key pressed. Exiting monitoring.");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static async Task<bool> TryReinitializeForRetry()
+    {
+        // This is a retry - check if we can retry
+        if (ClockProvider.Instance is null || !ClockProvider.Instance.CanRetry)
+        {
+            Logger.LogWarning($"Maximum retry attempts reached ({ClockProvider.Instance?.MaxRetryAttempts ?? 0}). Cannot retry.");
+            return false;
+        }
+
+        // Ask for confirmation if not in auto-run mode
+        if (!_autoRetryEnabled)
+        {
+            Logger.LogInfo(SeparatorLine);
+            Logger.LogInfo($"Would you like to retry? (Remaining attempts: {ClockProvider.Instance.RemainingAttempts})");
+            Logger.LogInfo("The next attempt will wait for tomorrow's threshold window.");
+            Logger.LogInfo("Press Enter to retry, or any other key to exit:");
+            Logger.LogInfo(SeparatorLine);
+
+            var key = Console.ReadKey();
+            Console.WriteLine(); // New line after key press
+
+            if (key.Key != ConsoleKey.Enter)
+            {
+                Logger.LogInfo("Retry declined by user.");
+                return false;
+            }
+
+            Logger.LogInfo("Retry confirmed by user.");
+        }
+        else
+        {
+            Logger.LogInfo("Auto-run mode: Automatically retrying...");
+        }
+
+        Logger.LogInfo("Preparing for retry attempt {0} of {1}...",
+            ClockProvider.Instance.AttemptCount + 1,
+            ClockProvider.Instance.MaxRetryAttempts);
+
+        var restarted = await ClockProvider.Instance.ResetAndRestartAsync().ConfigureAwait(false);
+        if (!restarted)
+        {
+            Logger.LogWarning("Failed to restart. Maximum retries reached.");
+            return false;
+        }
+
+        // Reset operation tracking for new attempt
+        _allOperationsCompleted = new TaskCompletionSource();
+        _allThresholdsReached = false;
+        _pendingOperations = 0;
+        return true;
+    }
+
+    private static bool ReinitializeClockProvider()
+    {
+        Debug.Assert(ClockProvider.Instance is not null, "ClockProvider.Instance should not be null here.");
+
+        // Unsubscribe from events before potential retry
+        ClockProvider.Instance.OnClockThresholdExceeded -= OnClockThresholdExceeded;
+        ClockProvider.Instance.OnAllThresholdsReached -= OnAllThresholdsReached;
+
+        // Check if we can/should retry
+        if (!ClockProvider.Instance.CanRetry)
+        {
+            Logger.LogWarning("No more retry attempts available.");
+            return false;
+        }
+
+        return true;
     }
 
     private static async Task<bool> VerifyAllPreCheckResults(
@@ -380,7 +421,7 @@ public static class HeadlessApp
         }
     }
 
-    private static async void OnClockThresholdExceeded(object? sender, ClockProvider.ClockThresholdExceededArgs e)
+    private static async void OnClockThresholdExceeded(object? sender, ClockProvider.ClockThresholdExceededEventArgs e)
     {
         IncrementPendingOperations();
         try

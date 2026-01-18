@@ -553,7 +553,7 @@ public partial class MainView
         }
     }
 
-    private async void OnClockThresholdExceeded(object? sender, ClockProvider.ClockThresholdExceededArgs e)
+    private async void OnClockThresholdExceeded(object? sender, ClockProvider.ClockThresholdExceededEventArgs e)
     {
         IncrementPendingOperations();
         try

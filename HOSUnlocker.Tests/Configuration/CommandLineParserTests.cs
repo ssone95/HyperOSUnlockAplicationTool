@@ -1,6 +1,6 @@
 using HOSUnlock.Configuration;
 
-namespace HOSUnlock.Tests.Configuration;
+namespace HOSUnlocker.Tests.Configuration;
 
 [TestClass]
 public sealed class CommandLineParserTests
@@ -132,7 +132,7 @@ public sealed class CommandLineParserTests
         // Assert
         Assert.IsFalse(result);
         Assert.IsNotNull(errorMessage);
-        Assert.IsTrue(errorMessage.Contains("--max-retries"));
+        Assert.Contains("--max-retries", errorMessage);
     }
 
     [TestMethod]
@@ -148,7 +148,7 @@ public sealed class CommandLineParserTests
         // Assert
         Assert.IsFalse(result);
         Assert.IsNotNull(errorMessage);
-        Assert.IsTrue(errorMessage.Contains("--max-retries"));
+        Assert.Contains("--max-retries", errorMessage);
     }
 
     [TestMethod]
@@ -164,7 +164,7 @@ public sealed class CommandLineParserTests
         // Assert
         Assert.IsFalse(result);
         Assert.IsNotNull(errorMessage);
-        Assert.IsTrue(errorMessage.Contains("requires a value"));
+        Assert.Contains("requires a value", errorMessage);
     }
 
     [TestMethod]
@@ -180,7 +180,7 @@ public sealed class CommandLineParserTests
         // Assert
         Assert.IsFalse(result);
         Assert.IsNotNull(errorMessage);
-        Assert.IsTrue(errorMessage.Contains("must be an integer"));
+        Assert.Contains("must be an integer", errorMessage);
     }
 
     [TestMethod]
@@ -241,7 +241,7 @@ public sealed class CommandLineParserTests
         // Assert
         Assert.IsFalse(result);
         Assert.IsNotNull(errorMessage);
-        Assert.IsTrue(errorMessage.Contains("--api-retry-wait"));
+        Assert.Contains("--api-retry-wait", errorMessage);
     }
 
     [TestMethod]
@@ -257,7 +257,7 @@ public sealed class CommandLineParserTests
         // Assert
         Assert.IsFalse(result);
         Assert.IsNotNull(errorMessage);
-        Assert.IsTrue(errorMessage.Contains("--api-retry-wait"));
+        Assert.Contains("--api-retry-wait", errorMessage);
     }
 
     [TestMethod]
@@ -318,8 +318,8 @@ public sealed class CommandLineParserTests
         // Assert
         Assert.IsFalse(result);
         Assert.IsNotNull(errorMessage);
-        Assert.IsTrue(errorMessage.Contains("HOSUnlock"));
-        Assert.IsTrue(errorMessage.Contains("Usage"));
+        Assert.Contains("HOSUnlock", errorMessage);
+        Assert.Contains("Usage", errorMessage);
     }
 
     [TestMethod]
@@ -335,7 +335,7 @@ public sealed class CommandLineParserTests
         // Assert
         Assert.IsFalse(result);
         Assert.IsNotNull(errorMessage);
-        Assert.IsTrue(errorMessage.Contains("HOSUnlock"));
+        Assert.Contains("HOSUnlock", errorMessage);
     }
 
     [TestMethod]
@@ -351,8 +351,8 @@ public sealed class CommandLineParserTests
         // Assert
         Assert.IsFalse(result);
         Assert.IsNotNull(errorMessage);
-        Assert.IsTrue(errorMessage.Contains("Unknown argument"));
-        Assert.IsTrue(errorMessage.Contains("--unknown-flag"));
+        Assert.Contains("Unknown argument", errorMessage);
+        Assert.Contains("--unknown-flag", errorMessage);
     }
 
     [TestMethod]
@@ -379,12 +379,12 @@ public sealed class CommandLineParserTests
         var helpText = CommandLineParser.GetHelpText();
 
         // Assert
-        Assert.IsTrue(helpText.Contains("--headless"));
-        Assert.IsTrue(helpText.Contains("--auto-run"));
-        Assert.IsTrue(helpText.Contains("--max-retries"));
-        Assert.IsTrue(helpText.Contains("--max-api-retries"));
-        Assert.IsTrue(helpText.Contains("--api-retry-wait"));
-        Assert.IsTrue(helpText.Contains("--fixed-retry-wait"));
-        Assert.IsTrue(helpText.Contains("--help"));
+        Assert.Contains("--headless", helpText);
+        Assert.Contains("--auto-run", helpText);
+        Assert.Contains("--max-retries", helpText);
+        Assert.Contains("--max-api-retries", helpText);
+        Assert.Contains("--api-retry-wait", helpText);
+        Assert.Contains("--fixed-retry-wait", helpText);
+        Assert.Contains("--help", helpText);
     }
 }

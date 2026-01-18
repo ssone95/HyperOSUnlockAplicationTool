@@ -1,7 +1,7 @@
 using HOSUnlock.Enums;
 using HOSUnlock.Models;
 
-namespace HOSUnlock.Tests.Models;
+namespace HOSUnlocker.Tests.Models;
 
 [TestClass]
 public sealed class BlCheckResponseDtoTests

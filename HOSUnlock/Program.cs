@@ -1,7 +1,8 @@
-﻿using HOSUnlock;
-using HOSUnlock.Configuration;
+﻿using HOSUnlock.Configuration;
 
-internal class Program
+namespace HOSUnlock;
+
+internal static class Program
 {
     private static async Task Main(string[] args)
     {
@@ -22,7 +23,7 @@ internal class Program
         }
         else
         {
-            await new App().Run(options);
+            await App.Run(options);
         }
     }
 }

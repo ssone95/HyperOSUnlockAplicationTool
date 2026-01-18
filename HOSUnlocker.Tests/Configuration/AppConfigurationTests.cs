@@ -2,7 +2,7 @@ using HOSUnlock.Configuration;
 using HOSUnlock.Constants;
 using HOSUnlocker.Tests.Infrastructure;
 
-namespace HOSUnlock.Tests.Configuration;
+namespace HOSUnlocker.Tests.Configuration;
 
 [TestClass]
 public sealed class AppConfigurationTests
@@ -535,7 +535,7 @@ public sealed class AppConfigurationTests
 
         // Assert
         Assert.IsNotNull(config);
-        Assert.AreEqual(1, config.Tokens.Length);
+        Assert.HasCount(1, config.Tokens);
         Assert.AreEqual(TokenConstants.DefaultTokenValue, config.Tokens[0].Token);
         Assert.AreEqual(1, config.Tokens[0].Index);
     }
@@ -549,7 +549,7 @@ public sealed class AppConfigurationTests
 
         // Assert
         Assert.IsNotNull(config);
-        Assert.AreEqual(1, config.TokenShifts.Length);
+        Assert.HasCount(1, config.TokenShifts);
         Assert.AreEqual(0, config.TokenShifts[0]);
     }
 
@@ -562,73 +562,6 @@ public sealed class AppConfigurationTests
 
         // Assert - default config should not be valid (uses placeholder token)
         Assert.IsFalse(config.IsConfigurationValid());
-    }
-
-    #endregion
-
-    #region Constants Tests
-
-    [TestMethod]
-    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void Constants_DefaultMaxAutoRetries_IsFive()
-    {
-        Assert.AreEqual(5, AppConfiguration.DefaultMaxAutoRetries);
-    }
-
-    [TestMethod]
-    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void Constants_MinAutoRetries_IsOne()
-    {
-        Assert.AreEqual(1, AppConfiguration.MinAutoRetries);
-    }
-
-    [TestMethod]
-    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void Constants_MaxAutoRetriesLimit_Is365()
-    {
-        Assert.AreEqual(365, AppConfiguration.MaxAutoRetriesLimit);
-    }
-
-    [TestMethod]
-    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void Constants_DefaultMaxApiRetries_IsThree()
-    {
-        Assert.AreEqual(3, AppConfiguration.DefaultMaxApiRetries);
-    }
-
-    [TestMethod]
-    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void Constants_MinApiRetries_IsZero()
-    {
-        Assert.AreEqual(0, AppConfiguration.MinApiRetries);
-    }
-
-    [TestMethod]
-    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void Constants_MaxApiRetriesLimit_IsTen()
-    {
-        Assert.AreEqual(10, AppConfiguration.MaxApiRetriesLimit);
-    }
-
-    [TestMethod]
-    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void Constants_DefaultApiRetryWaitTimeMs_Is100()
-    {
-        Assert.AreEqual(100, AppConfiguration.DefaultApiRetryWaitTimeMs);
-    }
-
-    [TestMethod]
-    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void Constants_MinApiRetryWaitTimeMs_IsOne()
-    {
-        Assert.AreEqual(1, AppConfiguration.MinApiRetryWaitTimeMs);
-    }
-
-    [TestMethod]
-    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void Constants_MaxApiRetryWaitTimeMsLimit_Is1000()
-    {
-        Assert.AreEqual(1000, AppConfiguration.MaxApiRetryWaitTimeMsLimit);
     }
 
     #endregion

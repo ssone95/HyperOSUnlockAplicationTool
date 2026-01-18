@@ -1,6 +1,6 @@
 using HOSUnlock.Configuration;
 
-namespace HOSUnlock.Tests.Configuration;
+namespace HOSUnlocker.Tests.Configuration;
 
 [TestClass]
 public sealed class CommandLineOptionsTests

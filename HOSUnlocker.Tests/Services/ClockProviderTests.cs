@@ -1,8 +1,7 @@
-using HOSUnlock.Configuration;
 using HOSUnlock.Models.Common;
 using HOSUnlock.Services;
 
-namespace HOSUnlock.Tests.Services;
+namespace HOSUnlocker.Tests.Services;
 
 [TestClass]
 public sealed class ClockProviderTests
@@ -12,7 +11,7 @@ public sealed class ClockProviderTests
     #region ClockThresholdExceededArgs Tests
 
     [TestMethod]
-    [Timeout(TestTimeoutMs)]
+    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
     public void ClockThresholdExceededArgs_Constructor_SetsProperties()
     {
         // Arrange
@@ -21,7 +20,7 @@ public sealed class ClockProviderTests
         var beijingTime = utcTime.AddHours(8);
 
         // Act
-        var args = new ClockProvider.ClockThresholdExceededArgs(tokenShift, utcTime, beijingTime);
+        var args = new ClockProvider.ClockThresholdExceededEventArgs(tokenShift, utcTime, beijingTime);
 
         // Assert
         Assert.AreEqual(tokenShift, args.TokenShiftDetails);
@@ -30,7 +29,7 @@ public sealed class ClockProviderTests
     }
 
     [TestMethod]
-    [Timeout(TestTimeoutMs)]
+    [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
     public void ClockThresholdExceededArgs_LocalTime_ConvertsFromUtc()
     {
         // Arrange
@@ -39,12 +38,10 @@ public sealed class ClockProviderTests
         var beijingTime = utcTime.AddHours(8);
 
         // Act
-        var args = new ClockProvider.ClockThresholdExceededArgs(tokenShift, utcTime, beijingTime);
+        var args = new ClockProvider.ClockThresholdExceededEventArgs(tokenShift, utcTime, beijingTime);
         var localTime = args.LocalTime;
 
         // Assert
-        Assert.IsNotNull(localTime);
-        // LocalTime should be the UTC time converted to local timezone
         var expectedLocalTime = TimeZoneInfo.ConvertTimeFromUtc(utcTime, TimeZoneInfo.Local);
         Assert.AreEqual(expectedLocalTime, localTime);
     }
