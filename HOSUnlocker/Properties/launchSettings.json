@@ -1,8 +1,7 @@
 {
   "profiles": {
     "HOSUnlock": {
-      "commandName": "Project",
-      "commandLineArgs": ""
+      "commandName": "Project"
     },
     "HOSUnlock-Auto": {
       "commandName": "Project",
@@ -35,6 +34,10 @@
     "HOSUnlock-Help": {
       "commandName": "Project",
       "commandLineArgs": "--help"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker",
+      "commandLineArgs": "--headless --auto-run"
     }
   }
 }
