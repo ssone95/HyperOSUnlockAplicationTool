@@ -1,0 +1,43 @@
+{
+  "profiles": {
+    "HOSUnlock": {
+      "commandName": "Project"
+    },
+    "HOSUnlock-Auto": {
+      "commandName": "Project",
+      "commandLineArgs": "--auto-run"
+    },
+    "HOSUnlock-Headless": {
+      "commandName": "Project",
+      "commandLineArgs": "--headless"
+    },
+    "HOSUnlock-Headless-Auto": {
+      "commandName": "Project",
+      "commandLineArgs": "--headless --auto-run"
+    },
+    "HOSUnlock-MaxRetries10": {
+      "commandName": "Project",
+      "commandLineArgs": "--max-retries 10"
+    },
+    "HOSUnlock-Headless-Auto-MaxRetries10": {
+      "commandName": "Project",
+      "commandLineArgs": "--headless --auto-run --max-retries 10"
+    },
+    "HOSUnlock-CustomApiRetry": {
+      "commandName": "Project",
+      "commandLineArgs": "--max-api-retries 5 --api-retry-wait 200"
+    },
+    "HOSUnlock-FixedRetryWait": {
+      "commandName": "Project",
+      "commandLineArgs": "--max-api-retries 3 --api-retry-wait 150 --fixed-retry-wait"
+    },
+    "HOSUnlock-Help": {
+      "commandName": "Project",
+      "commandLineArgs": "--help"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker",
+      "commandLineArgs": "--headless --auto-run"
+    }
+  }
+}

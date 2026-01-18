@@ -1,8 +1,0 @@
-{
-  "profiles": {
-    "HOSUnlock": {
-      "commandName": "Project",
-      "commandLineArgs": "--headless"
-    }
-  }
-}

@@ -1,0 +1,66 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            artifact: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+            artifact: linux-x64
+          - os: macos-latest
+            rid: osx-x64
+            artifact: osx-x64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish
+        run: dotnet publish -c Release -r ${{ matrix.rid }} -o ./publish/${{ matrix.artifact }}
+
+      - name: Zip artifacts (Windows)
+        if: matrix.os == 'windows-latest'
+        run: Compress-Archive -Path ./publish/${{ matrix.artifact }}/* -DestinationPath ./publish/${{ matrix.artifact }}.zip
+
+      - name: Zip artifacts (Linux/Mac)
+        if: matrix.os != 'windows-latest'
+        run: zip -r ./publish/${{ matrix.artifact }}.zip ./publish/${{ matrix.artifact }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ./publish/${{ matrix.artifact }}.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.zip
+          generate_release_notes: true
