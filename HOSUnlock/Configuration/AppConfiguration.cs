@@ -7,11 +7,36 @@ namespace HOSUnlock.Configuration;
 
 public sealed class AppConfiguration
 {
+    // Validation constants
+    public const int MinAutoRetries = 1;
+    public const int MaxAutoRetriesLimit = 365;
+    public const int DefaultMaxAutoRetries = 5;
+
+    public const int MinApiRetries = 0;
+    public const int MaxApiRetriesLimit = 10;
+    public const int DefaultMaxApiRetries = 3;
+
+    public const int MinApiRetryWaitTimeMs = 1;
+    public const int MaxApiRetryWaitTimeMsLimit = 1000;
+    public const int DefaultApiRetryWaitTimeMs = 100;
+
     public required TokenInfo[] Tokens { get; init; }
     public required int[] TokenShifts { get; init; }
 
     [JsonIgnore]
     public bool AutoRunOnStart { get; set; }
+
+    [JsonIgnore]
+    public bool HeadlessMode { get; set; }
+
+    // These are settable to allow command-line overrides
+    public int MaxAutoRetries { get; set; } = DefaultMaxAutoRetries;
+
+    public int MaxApiRetries { get; set; } = DefaultMaxApiRetries;
+
+    public int ApiRetryWaitTimeMs { get; set; } = DefaultApiRetryWaitTimeMs;
+
+    public bool MultiplyApiRetryWaitTimeByAttempt { get; set; } = true;
 
     public static AppConfiguration? Instance { get; private set; }
 
@@ -35,6 +60,48 @@ public sealed class AppConfiguration
             return false;
 
         return true;
+    }
+
+    /// <summary>
+    /// Gets the validated MaxAutoRetries value, clamped to valid range.
+    /// </summary>
+    public int GetValidatedMaxAutoRetries()
+        => Math.Clamp(MaxAutoRetries, MinAutoRetries, MaxAutoRetriesLimit);
+
+    /// <summary>
+    /// Gets the validated MaxApiRetries value, clamped to valid range.
+    /// </summary>
+    public int GetValidatedMaxApiRetries()
+        => Math.Clamp(MaxApiRetries, MinApiRetries, MaxApiRetriesLimit);
+
+    /// <summary>
+    /// Gets the validated ApiRetryWaitTimeMs value, clamped to valid range.
+    /// </summary>
+    public int GetValidatedApiRetryWaitTimeMs()
+        => Math.Clamp(ApiRetryWaitTimeMs, MinApiRetryWaitTimeMs, MaxApiRetryWaitTimeMsLimit);
+
+    /// <summary>
+    /// Applies command-line overrides to this configuration.
+    /// </summary>
+    public void ApplyCommandLineOverrides(CommandLineOptions options)
+    {
+        if (options.HeadlessMode.HasValue)
+            HeadlessMode = options.HeadlessMode.Value;
+
+        if (options.AutoRunOnStart.HasValue)
+            AutoRunOnStart = options.AutoRunOnStart.Value;
+
+        if (options.MaxAutoRetries.HasValue)
+            MaxAutoRetries = options.MaxAutoRetries.Value;
+
+        if (options.MaxApiRetries.HasValue)
+            MaxApiRetries = options.MaxApiRetries.Value;
+
+        if (options.ApiRetryWaitTimeMs.HasValue)
+            ApiRetryWaitTimeMs = options.ApiRetryWaitTimeMs.Value;
+
+        if (options.MultiplyApiRetryWaitTimeByAttempt.HasValue)
+            MultiplyApiRetryWaitTimeByAttempt = options.MultiplyApiRetryWaitTimeByAttempt.Value;
     }
 
     public static async Task LoadAsync(string configPath = "")

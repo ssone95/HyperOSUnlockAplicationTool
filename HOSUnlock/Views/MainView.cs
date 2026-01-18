@@ -19,11 +19,12 @@ public partial class MainView
     // Timers
     private Timer? _dateInfoTimer;
 
-    // Processing state
-    private MiAuthRequestProcessor? _miAuthRequestProcessor;
+    // Processing state - using interface
+    private IMiAuthRequestProcessor? _miAuthRequestProcessor;
     private CancellationTokenSource? _cancellationTokenSource;
     private bool _isRunning;
     private bool _allThresholdsReached;
+    private bool _userRequestedStop;
     private bool _disposed;
 
     // Track pending operations (same pattern as HeadlessApp)
@@ -133,13 +134,13 @@ public partial class MainView
         {
             if (!ClockProvider.Instance.CanRetry)
             {
-                ShowError($"Maximum retry attempts ({ClockProvider.Instance.AttemptCount}) reached.\n\nPlease restart the application to continue.");
+                ShowError($"Maximum retry attempts ({ClockProvider.Instance.MaxRetryAttempts}) reached.\n\nPlease restart the application to continue.");
                 return;
             }
 
             Application.MainLoop?.Invoke(() =>
             {
-                LogApp($"Restarting... (Attempt {ClockProvider.Instance.AttemptCount + 1} of 5)");
+                LogApp($"Restarting... (Attempt {ClockProvider.Instance.AttemptCount + 1} of {ClockProvider.Instance.MaxRetryAttempts})");
             });
 
             var restarted = await ClockProvider.Instance.ResetAndRestartAsync().ConfigureAwait(false);
@@ -152,6 +153,7 @@ public partial class MainView
 
         _isRunning = true;
         _allThresholdsReached = false;
+        _userRequestedStop = false;
         _allOperationsCompleted = new TaskCompletionSource();
         _cancellationTokenSource = new CancellationTokenSource();
 
@@ -189,8 +191,21 @@ public partial class MainView
 
     private async Task HandleCompletionAsync()
     {
+        // If user explicitly requested stop, don't auto-retry
+        if (_userRequestedStop)
+        {
+            LogApp("Operation stopped by user. Auto-retry disabled.");
+            Application.MainLoop?.Invoke(() =>
+            {
+                _startButton.Text = "_Start";
+                _startButton.Enabled = true;
+            });
+            return;
+        }
+
         var isAutoRun = AppConfiguration.Instance?.AutoRunOnStart == true;
         var canRetry = ClockProvider.Instance?.CanRetry == true;
+        var maxRetries = ClockProvider.Instance?.MaxRetryAttempts ?? AppConfiguration.DefaultMaxAutoRetries;
 
         if (canRetry)
         {
@@ -248,14 +263,14 @@ public partial class MainView
                 if (!isAutoRun)
                 {
                     MessageBox.Query("Max Retries Reached",
-                        "Maximum retry attempts (5) reached.\n\n" +
+                        $"Maximum retry attempts ({maxRetries}) reached.\n\n" +
                         "Please restart the application if you need to try again.\n" +
-                        "(Token may have expired after 5 days)",
+                        "(Token may have expired after multiple days)",
                         "OK");
                 }
                 else
                 {
-                    LogApp("[WRN] Maximum retry attempts reached (5). Application will remain open.");
+                    LogApp($"[WRN] Maximum retry attempts reached ({maxRetries}). Application will remain open.");
                     LogApp("Please restart the application to try again.");
                 }
             });
@@ -268,6 +283,7 @@ public partial class MainView
             return;
 
         LogApp("Stop requested by user...");
+        _userRequestedStop = true;
         _cancellationTokenSource?.Cancel();
         _allOperationsCompleted?.TrySetResult();
     }
@@ -309,7 +325,7 @@ public partial class MainView
         StartTimeDisplayTimer();
 
         var attemptInfo = ClockProvider.Instance.AttemptCount > 0
-            ? $" (Attempt {ClockProvider.Instance.AttemptCount + 1} of 5)"
+            ? $" (Attempt {ClockProvider.Instance.AttemptCount + 1} of {ClockProvider.Instance.MaxRetryAttempts})"
             : "";
         LogApp($"Monitoring clock thresholds...{attemptInfo}");
         LogApp("Application will process when thresholds are reached.");

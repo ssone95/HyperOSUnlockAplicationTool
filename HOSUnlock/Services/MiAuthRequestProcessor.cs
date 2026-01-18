@@ -7,23 +7,60 @@ using HOSUnlock.Models.Common;
 
 namespace HOSUnlock.Services;
 
-public sealed class MiAuthRequestProcessor : IDisposable
+/// <summary>
+/// Interface for MiAuthRequestProcessor to enable mocking in tests.
+/// </summary>
+public interface IMiAuthRequestProcessor : IDisposable
 {
-    private readonly Dictionary<TokenInfo, MiDataService> _miDataServices;
+    Task<Dictionary<TokenInfo, BaseResponse<BlCheckResponseDto>>> StartAsync();
+    Task<BaseResponse<BlCheckResponseDto>> RunSingleBlCheckAsync(TokenInfo tokenInfo);
+    Task<BaseResponse<ApplyBlAuthResponseDto>> ApplyForUnlockAsync(TokenShiftDefinition tokenShift);
+    Task StopAsync();
+}
+
+/// <summary>
+/// Factory for creating IMiDataService instances.
+/// </summary>
+public interface IMiDataServiceFactory
+{
+    IMiDataService Create(string cookieValue, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Default factory that creates MiDataService instances.
+/// </summary>
+public sealed class MiDataServiceFactory : IMiDataServiceFactory
+{
+    public IMiDataService Create(string cookieValue, CancellationToken cancellationToken)
+        => new MiDataService(cookieValue, cancellationToken);
+}
+
+public sealed class MiAuthRequestProcessor : IMiAuthRequestProcessor
+{
+    private readonly Dictionary<TokenInfo, IMiDataService> _miDataServices;
     private readonly CancellationTokenSource _ctSource;
     private bool _disposed;
 
     public MiAuthRequestProcessor(AppConfiguration configuration, CancellationTokenSource ctSource)
+        : this(configuration, ctSource, new MiDataServiceFactory())
+    {
+    }
+
+    public MiAuthRequestProcessor(
+        AppConfiguration configuration,
+        CancellationTokenSource ctSource,
+        IMiDataServiceFactory dataServiceFactory)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(ctSource);
+        ArgumentNullException.ThrowIfNull(dataServiceFactory);
 
         _ctSource = ctSource;
         _miDataServices = configuration.Tokens
             .OrderBy(x => x.Index)
             .ToDictionary(
                 tokenInfo => tokenInfo,
-                tokenInfo => new MiDataService(tokenInfo.Token, _ctSource.Token));
+                tokenInfo => dataServiceFactory.Create(tokenInfo.Token, _ctSource.Token));
     }
 
     public async Task<Dictionary<TokenInfo, BaseResponse<BlCheckResponseDto>>> StartAsync()

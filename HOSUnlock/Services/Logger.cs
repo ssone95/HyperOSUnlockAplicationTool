@@ -2,7 +2,30 @@ using System;
 
 namespace HOSUnlock.Services;
 
-public sealed class Logger : IDisposable
+/// <summary>
+/// Interface for Logger to enable mocking in tests.
+/// </summary>
+public interface ILogger : IDisposable
+{
+    void Log(LogLevel level, string message, Exception? ex = null, params object[] args);
+    void LogDebug(string message, params object[] args);
+    void LogInfo(string message, params object[] args);
+    void LogWarning(string message, params object[] args);
+    void LogError(string message, Exception? ex = null, params object[] args);
+}
+
+/// <summary>
+/// Log level enumeration.
+/// </summary>
+public enum LogLevel
+{
+    Debug,
+    Info,
+    Warning,
+    Error
+}
+
+public sealed class Logger : ILogger
 {
     private readonly FileStream _logFileStream;
     private readonly StreamWriter _logStreamWriter;
@@ -55,20 +78,10 @@ public sealed class Logger : IDisposable
         return logsDirectory;
     }
 
+    // Static methods for convenience (delegate to instance)
     public static void Log(LogLevel level, string message, Exception? ex = null, params object[] args)
     {
-        if (Instance is null)
-            return;
-
-        var formattedMessage = args.Length > 0 ? string.Format(message, args) : message;
-        var logMessage = $"[{FormatLogLevel(level)}] [{Instance._prefix}] {formattedMessage}";
-
-        if (ex is not null)
-        {
-            logMessage += $"\nException: {ex}";
-        }
-
-        Instance.WriteLog(logMessage);
+        Instance?.LogInstance(level, message, ex, args);
     }
 
     public static void LogDebug(string message, params object[] args)
@@ -91,6 +104,47 @@ public sealed class Logger : IDisposable
     public static void LogError(string message, Exception? ex = null, params object[] args)
     {
         Log(LogLevel.Error, message, ex, args);
+    }
+
+    // Instance methods (ILogger implementation)
+    void ILogger.Log(LogLevel level, string message, Exception? ex, params object[] args)
+    {
+        LogInstance(level, message, ex, args);
+    }
+
+    void ILogger.LogDebug(string message, params object[] args)
+    {
+        if (!string.IsNullOrWhiteSpace(message))
+            LogInstance(LogLevel.Debug, message, null, args);
+    }
+
+    void ILogger.LogInfo(string message, params object[] args)
+    {
+        if (!string.IsNullOrWhiteSpace(message))
+            LogInstance(LogLevel.Info, message, null, args);
+    }
+
+    void ILogger.LogWarning(string message, params object[] args)
+    {
+        LogInstance(LogLevel.Warning, message, null, args);
+    }
+
+    void ILogger.LogError(string message, Exception? ex, params object[] args)
+    {
+        LogInstance(LogLevel.Error, message, ex, args);
+    }
+
+    private void LogInstance(LogLevel level, string message, Exception? ex, params object[] args)
+    {
+        var formattedMessage = args.Length > 0 ? string.Format(message, args) : message;
+        var logMessage = $"[{FormatLogLevel(level)}] [{_prefix}] {formattedMessage}";
+
+        if (ex is not null)
+        {
+            logMessage += $"\nException: {ex}";
+        }
+
+        WriteLog(logMessage);
     }
 
     private void WriteLog(string message)
@@ -131,13 +185,5 @@ public sealed class Logger : IDisposable
         _logStreamWriter.Flush();
         _logStreamWriter.Dispose();
         _logFileStream.Dispose();
-    }
-
-    public enum LogLevel
-    {
-        Debug,
-        Info,
-        Warning,
-        Error
     }
 }

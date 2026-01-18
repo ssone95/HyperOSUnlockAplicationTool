@@ -7,12 +7,15 @@ namespace HOSUnlock;
 
 public sealed class App
 {
-    public async Task Run(string[] args)
+    public async Task Run(CommandLineOptions options)
     {
         try
         {
             Logger.InitializeLogger("UI", logToConsoleToo: false);
             await AppConfiguration.LoadAsync().ConfigureAwait(false);
+
+            // Apply command-line overrides after config is loaded
+            AppConfiguration.Instance?.ApplyCommandLineOverrides(options);
         }
         catch (Exception ex)
         {
@@ -25,15 +28,6 @@ public sealed class App
         try
         {
             Logger.LogInfo("TUI Application started.");
-
-            // Handle --auto-run argument
-            if (args.Any(y => string.Equals(y, "--auto-run", StringComparison.OrdinalIgnoreCase)))
-            {
-                if (AppConfiguration.Instance is not null)
-                {
-                    AppConfiguration.Instance.AutoRunOnStart = true;
-                }
-            }
 
             // Initialize ClockProvider if configuration is valid
             if (AppConfiguration.Instance?.IsConfigurationValid() == true)

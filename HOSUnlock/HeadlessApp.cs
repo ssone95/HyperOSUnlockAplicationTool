@@ -12,7 +12,7 @@ public static class HeadlessApp
 {
     private static CancellationTokenSource? _cancellationTokenSource;
     private static bool _allThresholdsReached;
-    private static MiAuthRequestProcessor? _miAuthRequestProcessor;
+    private static IMiAuthRequestProcessor? _miAuthRequestProcessor;
     private static readonly SemaphoreSlim _applicationProcessingSemaphore = new(1, 1);
 
     // Track pending threshold operations
@@ -23,7 +23,7 @@ public static class HeadlessApp
     // Track if we should auto-retry
     private static bool _autoRetryEnabled;
 
-    public static async Task Run(string[] args)
+    public static async Task Run(CommandLineOptions options)
     {
         Logger.InitializeLogger("Headless", logToConsoleToo: true);
         _cancellationTokenSource = new CancellationTokenSource();
@@ -42,6 +42,9 @@ public static class HeadlessApp
 
             await AppConfiguration.LoadAsync().ConfigureAwait(false);
 
+            // Apply command-line overrides after config is loaded
+            AppConfiguration.Instance?.ApplyCommandLineOverrides(options);
+
             if (AppConfiguration.Instance is null || !AppConfiguration.Instance.IsConfigurationValid())
             {
                 Logger.LogError("Application configuration is invalid.");
@@ -49,16 +52,16 @@ public static class HeadlessApp
                 return;
             }
 
-            // Handle --auto-run argument
-            if (args.Any(y => string.Equals(y, "--auto-run", StringComparison.OrdinalIgnoreCase)))
-            {
-                AppConfiguration.Instance.AutoRunOnStart = true;
-            }
-
             _autoRetryEnabled = AppConfiguration.Instance.AutoRunOnStart;
+
+            var maxRetries = AppConfiguration.Instance.GetValidatedMaxAutoRetries();
 
             Logger.LogInfo("Configuration loaded successfully.");
             Logger.LogInfo($"Auto-run mode: {(_autoRetryEnabled ? "ENABLED" : "DISABLED")}");
+            Logger.LogInfo($"Max auto retries: {maxRetries}");
+            Logger.LogInfo($"Max API retries: {AppConfiguration.Instance.GetValidatedMaxApiRetries()}");
+            Logger.LogInfo($"API retry wait time: {AppConfiguration.Instance.GetValidatedApiRetryWaitTimeMs()}ms" +
+                          (AppConfiguration.Instance.MultiplyApiRetryWaitTimeByAttempt ? " (multiplied by attempt)" : " (fixed)"));
 
             foreach (var (shift, index) in AppConfiguration.Instance.TokenShifts.Select((s, i) => (s, i + 1)))
             {
@@ -103,8 +106,8 @@ public static class HeadlessApp
                 if (ClockProvider.Instance is not null && !ClockProvider.Instance.CanRetry)
                 {
                     Logger.LogWarning("========================================");
-                    Logger.LogWarning("Maximum retry attempts reached (5).");
-                    Logger.LogWarning("Token may have expired after 5 days of trying.");
+                    Logger.LogWarning($"Maximum retry attempts reached ({ClockProvider.Instance.MaxRetryAttempts}).");
+                    Logger.LogWarning("Token may have expired after multiple days of trying.");
                     Logger.LogWarning("Please restart the application to try again.");
                     Logger.LogWarning("Press any key to terminate the application.");
                     Logger.LogWarning("========================================");
@@ -139,7 +142,7 @@ public static class HeadlessApp
                 // This is a retry - check if we can retry
                 if (ClockProvider.Instance is null || !ClockProvider.Instance.CanRetry)
                 {
-                    Logger.LogWarning("Maximum retry attempts reached (5). Cannot retry.");
+                    Logger.LogWarning($"Maximum retry attempts reached ({ClockProvider.Instance?.MaxRetryAttempts ?? 0}). Cannot retry.");
                     break;
                 }
 
@@ -151,16 +154,16 @@ public static class HeadlessApp
                     Logger.LogInfo("The next attempt will wait for tomorrow's threshold window.");
                     Logger.LogInfo("Press Enter to retry, or any other key to exit:");
                     Logger.LogInfo("========================================");
-                    
+
                     var key = Console.ReadKey();
                     Console.WriteLine(); // New line after key press
-                    
+
                     if (key.Key != ConsoleKey.Enter)
                     {
                         Logger.LogInfo("Retry declined by user.");
                         break;
                     }
-                    
+
                     Logger.LogInfo("Retry confirmed by user.");
                 }
                 else
@@ -168,7 +171,9 @@ public static class HeadlessApp
                     Logger.LogInfo("Auto-run mode: Automatically retrying...");
                 }
 
-                Logger.LogInfo("Preparing for retry attempt {0} of 5...", ClockProvider.Instance.AttemptCount + 1);
+                Logger.LogInfo("Preparing for retry attempt {0} of {1}...",
+                    ClockProvider.Instance.AttemptCount + 1,
+                    ClockProvider.Instance.MaxRetryAttempts);
 
                 var restarted = await ClockProvider.Instance.ResetAndRestartAsync().ConfigureAwait(false);
                 if (!restarted)
@@ -216,12 +221,14 @@ public static class HeadlessApp
 
             DisplayThresholdTimes();
 
-            Logger.LogInfo("Monitoring clock thresholds... (Attempt {0} of 5)",
-                ClockProvider.Instance.AttemptCount + 1);
-            
+            Logger.LogInfo("Monitoring clock thresholds... (Attempt {0} of {1})",
+                ClockProvider.Instance.AttemptCount + 1,
+                ClockProvider.Instance.MaxRetryAttempts);
+
             if (_autoRetryEnabled)
             {
-                Logger.LogInfo("Auto-run mode: Application will automatically retry if needed (up to 5 attempts).");
+                Logger.LogInfo("Auto-run mode: Application will automatically retry if needed (up to {0} attempts).",
+                    ClockProvider.Instance.MaxRetryAttempts);
             }
             else
             {
@@ -398,7 +405,7 @@ public static class HeadlessApp
         }
     }
 
-    private static async Task ProcessApplicationRequestResultAsync(
+    public static async Task ProcessApplicationRequestResultAsync(
         BaseResponse<ApplyBlAuthResponseDto> applicationResult,
         TokenShiftDefinition shiftDetails)
     {
@@ -453,7 +460,7 @@ public static class HeadlessApp
         }
     }
 
-    private static async Task RunDetailedApplicationStatusChecksAsync(
+    public static async Task RunDetailedApplicationStatusChecksAsync(
         BaseResponse<ApplyBlAuthResponseDto> response,
         TokenShiftDefinition shiftDefinition)
     {
@@ -499,7 +506,7 @@ public static class HeadlessApp
     /// <summary>
     /// Evaluates a BL check response and logs the result.
     /// </summary>
-    private static MiEnums.MiAuthApplicationResult EvaluateBlCheckResponse(
+    public static MiEnums.MiAuthApplicationResult EvaluateBlCheckResponse(
         BaseResponse<BlCheckResponseDto> response,
         string identifier)
     {

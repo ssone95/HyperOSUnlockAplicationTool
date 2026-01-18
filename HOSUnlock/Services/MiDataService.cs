@@ -8,7 +8,16 @@ using System.Text.Json;
 
 namespace HOSUnlock.Services;
 
-public sealed class MiDataService : IDisposable
+/// <summary>
+/// Interface for MiDataService to enable mocking in tests.
+/// </summary>
+public interface IMiDataService : IDisposable
+{
+    Task<BaseResponse<BlCheckResponseDto>> GetStatusCheckResultAsync();
+    Task<BaseResponse<ApplyBlAuthResponseDto>> GetApplyAuthForUnlockResultAsync();
+}
+
+public sealed class MiDataService : IMiDataService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

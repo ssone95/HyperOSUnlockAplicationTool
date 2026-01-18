@@ -1,4 +1,4 @@
-#define DBG
+//#define DBG
 
 using GuerrillaNtp;
 using HOSUnlock.Configuration;
@@ -9,11 +9,36 @@ using System.Collections.Concurrent;
 
 namespace HOSUnlock.Services;
 
-public sealed class ClockProvider : IDisposable
+/// <summary>
+/// Interface for ClockProvider to enable mocking in tests.
+/// </summary>
+public interface IClockProvider : IDisposable
+{
+    DateTime UtcNow { get; }
+    DateTime BeijingNow { get; }
+    DateTime LocalNow { get; }
+    int AttemptCount { get; }
+    int RemainingAttempts { get; }
+    bool CanRetry { get; }
+    int MaxRetryAttempts { get; }
+
+    event EventHandler<ClockProvider.ClockThresholdExceededArgs>? OnClockThresholdExceeded;
+    event EventHandler? OnAllThresholdsReached;
+    event EventHandler? OnMaxRetriesReached;
+
+    Task<bool> WereAllThresholdsReachedAsync();
+    (DateTime LocalTime, DateTime UtcTime, DateTime BeijingTime) GetCurrentTimes();
+    Dictionary<TokenShiftDefinition, (DateTime Beijing, DateTime Utc, DateTime Local)> GetThresholdSnapshots();
+    Task<bool> ResetAndRestartAsync();
+    void Stop();
+    void Resume();
+}
+
+public sealed class ClockProvider : IClockProvider
 {
     private const string ShanghaiTimeZoneId = "Asia/Shanghai";
-    private const int MaxRetryAttempts = 5;
 
+    private readonly int _maxRetryAttempts;
     private readonly NtpClient _ntpClient;
     private readonly TimeZoneInfo _beijingTimeZone;
     private readonly TimeZoneInfo _localTimeZone;
@@ -36,9 +61,11 @@ public sealed class ClockProvider : IDisposable
 
     public int AttemptCount => _attemptCount;
 
-    public int RemainingAttempts => MaxRetryAttempts - _attemptCount;
+    public int RemainingAttempts => _maxRetryAttempts - _attemptCount;
 
-    public bool CanRetry => _attemptCount < MaxRetryAttempts;
+    public bool CanRetry => _attemptCount < _maxRetryAttempts;
+
+    public int MaxRetryAttempts => _maxRetryAttempts;
 
     public event EventHandler<ClockThresholdExceededArgs>? OnClockThresholdExceeded;
     public event EventHandler? OnAllThresholdsReached;
@@ -47,6 +74,7 @@ public sealed class ClockProvider : IDisposable
     private ClockProvider(AppConfiguration config)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
+        _maxRetryAttempts = config.GetValidatedMaxAutoRetries();
         _beijingTimeZone = TimeZoneInfo.FindSystemTimeZoneById(ShanghaiTimeZoneId);
         _localTimeZone = TimeZoneInfo.Local;
         _requestTimeThresholds = new ConcurrentDictionary<TokenShiftDefinition, (DateTime, bool)>();
@@ -276,14 +304,14 @@ public sealed class ClockProvider : IDisposable
         {
             _attemptCount++;
 
-            if (_attemptCount >= MaxRetryAttempts)
+            if (_attemptCount >= _maxRetryAttempts)
             {
-                Logger.LogWarning("Maximum retry attempts ({0}) reached. Please restart the application.", MaxRetryAttempts);
+                Logger.LogWarning("Maximum retry attempts ({0}) reached. Please restart the application.", _maxRetryAttempts);
                 OnMaxRetriesReached?.Invoke(this, EventArgs.Empty);
                 return false;
             }
 
-            Logger.LogInfo("Resetting for attempt {0} of {1}...", _attemptCount + 1, MaxRetryAttempts);
+            Logger.LogInfo("Resetting for attempt {0} of {1}...", _attemptCount + 1, _maxRetryAttempts);
 
             // Update current time from NTP
             var originalUtcTime = GetUtcTime();
