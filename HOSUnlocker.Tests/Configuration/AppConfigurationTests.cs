@@ -386,14 +386,16 @@ public sealed class AppConfigurationTests
 
     [TestMethod]
     [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void ApplyCommandLineOverrides_HeadlessMode_Applied()
+    [DataRow(true)]
+    [DataRow(false)]
+    public void ApplyCommandLineOverrides_HeadlessMode_Applied(bool isInContainer)
     {
         // Arrange
         var config = TestMocks.CreateValidConfiguration();
         var options = new CommandLineOptions { HeadlessMode = true };
 
         // Act
-        config.ApplyCommandLineOverrides(options);
+        config.ApplyCommandLineOverrides(options, isInContainer);
 
         // Assert
         Assert.IsTrue(config.HeadlessMode);
@@ -401,14 +403,16 @@ public sealed class AppConfigurationTests
 
     [TestMethod]
     [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void ApplyCommandLineOverrides_AutoRunOnStart_Applied()
+    [DataRow(true)]
+    [DataRow(false)]
+    public void ApplyCommandLineOverrides_AutoRunOnStart_Applied(bool isInContainer)
     {
         // Arrange
         var config = TestMocks.CreateValidConfiguration();
         var options = new CommandLineOptions { AutoRunOnStart = true };
 
         // Act
-        config.ApplyCommandLineOverrides(options);
+        config.ApplyCommandLineOverrides(options, isInContainer);
 
         // Assert
         Assert.IsTrue(config.AutoRunOnStart);
@@ -416,14 +420,16 @@ public sealed class AppConfigurationTests
 
     [TestMethod]
     [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void ApplyCommandLineOverrides_MaxAutoRetries_Applied()
+    [DataRow(true)]
+    [DataRow(false)]
+    public void ApplyCommandLineOverrides_MaxAutoRetries_Applied(bool isInContainer)
     {
         // Arrange
         var config = TestMocks.CreateValidConfiguration();
         var options = new CommandLineOptions { MaxAutoRetries = 25 };
 
         // Act
-        config.ApplyCommandLineOverrides(options);
+        config.ApplyCommandLineOverrides(options, isInContainer);
 
         // Assert
         Assert.AreEqual(25, config.MaxAutoRetries);
@@ -431,14 +437,16 @@ public sealed class AppConfigurationTests
 
     [TestMethod]
     [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void ApplyCommandLineOverrides_MaxApiRetries_Applied()
+    [DataRow(true)]
+    [DataRow(false)]
+    public void ApplyCommandLineOverrides_MaxApiRetries_Applied(bool isInContainer)
     {
         // Arrange
         var config = TestMocks.CreateValidConfiguration();
         var options = new CommandLineOptions { MaxApiRetries = 7 };
 
         // Act
-        config.ApplyCommandLineOverrides(options);
+        config.ApplyCommandLineOverrides(options, isInContainer);
 
         // Assert
         Assert.AreEqual(7, config.MaxApiRetries);
@@ -446,14 +454,16 @@ public sealed class AppConfigurationTests
 
     [TestMethod]
     [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void ApplyCommandLineOverrides_ApiRetryWaitTimeMs_Applied()
+    [DataRow(true)]
+    [DataRow(false)]
+    public void ApplyCommandLineOverrides_ApiRetryWaitTimeMs_Applied(bool isInContainer)
     {
         // Arrange
         var config = TestMocks.CreateValidConfiguration();
         var options = new CommandLineOptions { ApiRetryWaitTimeMs = 300 };
 
         // Act
-        config.ApplyCommandLineOverrides(options);
+        config.ApplyCommandLineOverrides(options, isInContainer);
 
         // Assert
         Assert.AreEqual(300, config.ApiRetryWaitTimeMs);
@@ -461,14 +471,16 @@ public sealed class AppConfigurationTests
 
     [TestMethod]
     [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void ApplyCommandLineOverrides_MultiplyApiRetryWaitTimeByAttempt_Applied()
+    [DataRow(true)]
+    [DataRow(false)]
+    public void ApplyCommandLineOverrides_MultiplyApiRetryWaitTimeByAttempt_Applied(bool isInContainer)
     {
         // Arrange
         var config = TestMocks.CreateValidConfiguration();
         var options = new CommandLineOptions { MultiplyApiRetryWaitTimeByAttempt = false };
 
         // Act
-        config.ApplyCommandLineOverrides(options);
+        config.ApplyCommandLineOverrides(options, isInContainer);
 
         // Assert
         Assert.IsFalse(config.MultiplyApiRetryWaitTimeByAttempt);
@@ -476,7 +488,9 @@ public sealed class AppConfigurationTests
 
     [TestMethod]
     [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void ApplyCommandLineOverrides_NullOptions_NoChanges()
+    [DataRow(true)]
+    [DataRow(false)]
+    public void ApplyCommandLineOverrides_NullOptions_NoChanges(bool isInContainer)
     {
         // Arrange
         var config = TestMocks.CreateValidConfiguration();
@@ -485,18 +499,20 @@ public sealed class AppConfigurationTests
         var options = new CommandLineOptions(); // All null
 
         // Act
-        config.ApplyCommandLineOverrides(options);
+        config.ApplyCommandLineOverrides(options, isInContainer);
 
         // Assert - values unchanged
         Assert.AreEqual(5, config.MaxAutoRetries);
         Assert.AreEqual(3, config.MaxApiRetries);
-        Assert.IsFalse(config.HeadlessMode);
-        Assert.IsFalse(config.AutoRunOnStart);
+        Assert.AreEqual(isInContainer, config.HeadlessMode);
+        Assert.AreEqual(isInContainer, config.AutoRunOnStart);
     }
 
     [TestMethod]
     [Timeout(TestTimeoutMs, CooperativeCancellation = true)]
-    public void ApplyCommandLineOverrides_AllOptions_AllApplied()
+    [DataRow(true)]
+    [DataRow(false)]
+    public void ApplyCommandLineOverrides_AllOptions_AllApplied(bool isInContainer)
     {
         // Arrange
         var config = TestMocks.CreateValidConfiguration();
@@ -511,7 +527,7 @@ public sealed class AppConfigurationTests
         };
 
         // Act
-        config.ApplyCommandLineOverrides(options);
+        config.ApplyCommandLineOverrides(options, isInContainer);
 
         // Assert
         Assert.IsTrue(config.HeadlessMode);
