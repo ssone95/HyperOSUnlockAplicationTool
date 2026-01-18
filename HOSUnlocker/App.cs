@@ -14,7 +14,7 @@ public static class App
             Logger.InitializeLogger("UI", logToConsoleToo: false);
             await AppConfiguration.LoadAsync().ConfigureAwait(false);
 
-            AppConfiguration.Instance?.ApplyCommandLineOverrides(options);
+            AppConfiguration.Instance?.ApplyCommandLineOverrides(options, false);
         }
         catch (Exception ex)
         {

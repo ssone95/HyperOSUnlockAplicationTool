@@ -83,7 +83,7 @@ public sealed class AppConfiguration
     /// <summary>
     /// Applies command-line overrides to this configuration.
     /// </summary>
-    public void ApplyCommandLineOverrides(CommandLineOptions options)
+    public void ApplyCommandLineOverrides(CommandLineOptions options, bool isInContainer)
     {
         if (options.HeadlessMode.HasValue)
             HeadlessMode = options.HeadlessMode.Value;
@@ -102,6 +102,13 @@ public sealed class AppConfiguration
 
         if (options.MultiplyApiRetryWaitTimeByAttempt.HasValue)
             MultiplyApiRetryWaitTimeByAttempt = options.MultiplyApiRetryWaitTimeByAttempt.Value;
+
+        if (isInContainer)
+        {
+            HeadlessMode = true;
+            AutoRunOnStart = true;
+            Logger.LogInfo("Running in container environment; enabling headless, auto-run mode.");
+        }
     }
 
     public static async Task LoadAsync(string configPath = "")

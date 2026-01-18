@@ -2,9 +2,12 @@
 
 # This stage is used when running from VS in fast mode (Default for Debug configuration)
 FROM mcr.microsoft.com/dotnet/runtime:10.0-alpine AS base
+
+# Add timezone support
+RUN apk add tzdata
+
 USER $APP_UID
 WORKDIR /app
-
 
 # This stage is used to build the service project
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
@@ -26,3 +29,4 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "HOSUnlocker.dll"]
+RUN exit

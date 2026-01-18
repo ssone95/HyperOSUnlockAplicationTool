@@ -627,7 +627,7 @@ public partial class MainView
                 RecordResultFromCheckResponse(identifier, checkResult);
                 break;
 
-            case MiDataConstants.STATUS_COOKIE_EXPIRED:
+            case MiDataConstants.STATUS_COOKIE_EXPIRED_OR_INVALID:
                 LogResults("[ERR] Cookie expired!");
                 LogResults("Please update the cookie in configuration.");
                 RecordResult(identifier, OperationStatus.Failed, "Cookie expired");
@@ -724,7 +724,7 @@ public partial class MainView
         BaseResponse<BlCheckResponseDto> response,
         string identifier)
     {
-        if (response.Code == MiDataConstants.STATUS_COOKIE_EXPIRED)
+        if (response.Code == MiDataConstants.STATUS_COOKIE_EXPIRED_OR_INVALID)
         {
             LogResults($"[ERR] {identifier}: Cookie expired!");
             throw new InvalidOperationException($"{identifier}: Cookie expired.");

@@ -96,6 +96,11 @@ public sealed class MiAuthRequestProcessor : IMiAuthRequestProcessor
 
             return response;
         }
+        catch (MiException ex) when (ex.StatusCode == MiDataConstants.STATUS_COOKIE_EXPIRED_OR_INVALID)
+        {
+            Logger.LogError($"Cookie expired or invalid for token {tokenInfo.Index}.\nPlease check your token configuration for validity!", ex);
+            throw;
+        }
         catch (MiException)
         {
             throw;

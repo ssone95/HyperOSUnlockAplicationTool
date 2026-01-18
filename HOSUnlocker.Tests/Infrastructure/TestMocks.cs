@@ -166,7 +166,7 @@ public sealed class TestMocks
     {
         return new BaseResponse<BlCheckResponseDto>
         {
-            Code = MiDataConstants.STATUS_COOKIE_EXPIRED,
+            Code = MiDataConstants.STATUS_COOKIE_EXPIRED_OR_INVALID,
             Message = "Cookie expired",
             Data = null
         };
@@ -264,7 +264,7 @@ public sealed class TestMocks
     {
         return new BaseResponse<ApplyBlAuthResponseDto>
         {
-            Code = MiDataConstants.STATUS_COOKIE_EXPIRED,
+            Code = MiDataConstants.STATUS_COOKIE_EXPIRED_OR_INVALID,
             Message = "Cookie expired",
             Data = new ApplyBlAuthResponseDto
             {

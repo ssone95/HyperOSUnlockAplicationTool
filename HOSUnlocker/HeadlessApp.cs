@@ -1,6 +1,7 @@
 using HOSUnlock.Configuration;
 using HOSUnlock.Constants;
 using HOSUnlock.Enums;
+using HOSUnlock.Exceptions;
 using HOSUnlock.Models;
 using HOSUnlock.Models.Base;
 using HOSUnlock.Models.Common;
@@ -27,7 +28,7 @@ public static class HeadlessApp
     // Track if we should auto-retry
     private static bool _autoRetryEnabled;
 
-    public static async Task Run(CommandLineOptions options)
+    public static async Task Run(CommandLineOptions options, bool isInContainer)
     {
         Logger.InitializeLogger("Headless", logToConsoleToo: true);
         _cancellationTokenSource = new CancellationTokenSource();
@@ -41,98 +42,121 @@ public static class HeadlessApp
 
         try
         {
-            Logger.LogInfo("HOSUnlock - Headless Mode");
-            Logger.LogInfo("Press Ctrl+C to stop");
-
-            await AppConfiguration.LoadAsync().ConfigureAwait(false);
-
-            // Apply command-line overrides after config is loaded
-            AppConfiguration.Instance?.ApplyCommandLineOverrides(options);
-
-            if (AppConfiguration.Instance is null || !AppConfiguration.Instance.IsConfigurationValid())
+            bool appRanSuccessfully = await RunApplication(options, isInContainer).ConfigureAwait(false);
+            if (!appRanSuccessfully)
             {
-                Logger.LogError("Application configuration is invalid.");
-                Logger.LogError("Please check whether the appsettings.json file is valid and present in the same directory as the program.");
+                Logger.LogWarning("Application did not complete successfully. Exiting...");
                 return;
             }
-
-            _autoRetryEnabled = AppConfiguration.Instance.AutoRunOnStart;
-
-            var maxRetries = AppConfiguration.Instance.GetValidatedMaxAutoRetries();
-
-            Logger.LogInfo("Configuration loaded successfully.");
-            Logger.LogInfo($"Auto-run mode: {(_autoRetryEnabled ? "ENABLED" : "DISABLED")}");
-            Logger.LogInfo($"Max auto retries: {maxRetries}");
-            Logger.LogInfo($"Max API retries: {AppConfiguration.Instance.GetValidatedMaxApiRetries()}");
-            Logger.LogInfo($"API retry wait time: {AppConfiguration.Instance.GetValidatedApiRetryWaitTimeMs()}ms" +
-                          (AppConfiguration.Instance.MultiplyApiRetryWaitTimeByAttempt ? " (multiplied by attempt)" : " (fixed)"));
-
-            foreach (var (shift, index) in AppConfiguration.Instance.TokenShifts.Select((s, i) => (s, i + 1)))
-            {
-                Logger.LogInfo($"Token Shift #{index}: {shift}ms");
-            }
-
-            if (!AppConfiguration.Instance.AutoRunOnStart)
-            {
-                Logger.LogInfo("Auto-run on start is disabled. Press Enter to begin monitoring \nor any other key to exit:");
-                var key = Console.ReadKey();
-                Console.WriteLine(); // New line after key press
-                if (key.Key != ConsoleKey.Enter)
-                {
-                    Logger.LogInfo("Non-Enter key pressed. Exiting application.");
-                    return;
-                }
-            }
-            else
-            {
-                Logger.LogInfo("Auto-run on start is enabled. Beginning monitoring...");
-            }
-
-            await ClockProvider.InitializeAsync().ConfigureAwait(false);
-            Logger.LogInfo("Clock provider initialized.");
-
-            // Main monitoring loop with retry support
-            await RunWithRetryAsync().ConfigureAwait(false);
-
-            // Keep app open if not in auto-run mode
-            if (!_autoRetryEnabled)
-            {
-                Logger.LogInfo(SeparatorLine);
-                Logger.LogInfo("Application process completed.");
-                Logger.LogInfo("Please check the status details above and proceed according to instructions.");
-                Logger.LogInfo("Press any key to terminate the application.");
-                Logger.LogInfo(SeparatorLine);
-                Console.ReadKey();
-            }
-            else
-            {
-                // In auto-run mode with max retries reached, also keep open but with different message
-                if (ClockProvider.Instance is not null && !ClockProvider.Instance.CanRetry)
-                {
-                    Logger.LogWarning(SeparatorLine);
-                    Logger.LogWarning($"Maximum retry attempts reached ({ClockProvider.Instance.MaxRetryAttempts}).");
-                    Logger.LogWarning("Token may have expired after multiple days of trying.");
-                    Logger.LogWarning("Please restart the application to try again.");
-                    Logger.LogWarning("Press any key to terminate the application.");
-                    Logger.LogWarning(SeparatorLine);
-                    Console.ReadKey();
-                }
-            }
-
-            Logger.LogInfo("Shutting down application...");
         }
         catch (OperationCanceledException)
         {
             Logger.LogInfo("Operation cancelled by user.");
+            throw;
+        }
+        catch (MiException mex) when (mex.StatusCode == MiDataConstants.STATUS_COOKIE_EXPIRED_OR_INVALID)
+        {
+            Logger.LogError("MiException occurred: {0}", mex, "Cookie expired or invalid. Please check and update the token configuration.");
+            throw;
+        }
+        catch (MiException mex)
+        {
+            Logger.LogError("MiException occurred: {0}", mex, $"Status Code: {mex.StatusCode}, Message: {mex.Message}");
+            throw;
         }
         catch (Exception ex)
         {
             Logger.LogError("Fatal error occurred: {0}", ex, ex.Message);
+            throw;
         }
         finally
         {
             await CleanupAsync().ConfigureAwait(false);
         }
+    }
+
+    private static async Task<bool> RunApplication(CommandLineOptions options, bool isInContainer)
+    {
+        Logger.LogInfo("HOSUnlock - Headless Mode");
+        Logger.LogInfo("Press Ctrl+C to stop");
+
+        await AppConfiguration.LoadAsync().ConfigureAwait(false);
+
+        // Apply command-line overrides after config is loaded
+        AppConfiguration.Instance?.ApplyCommandLineOverrides(options, isInContainer);
+
+        if (AppConfiguration.Instance is null || !AppConfiguration.Instance.IsConfigurationValid())
+        {
+            Logger.LogError("Application configuration is invalid.");
+            Logger.LogError("Please check whether the appsettings.json file is valid and present in the same directory as the program.");
+            return false;
+        }
+
+        _autoRetryEnabled = AppConfiguration.Instance.AutoRunOnStart;
+
+        var maxRetries = AppConfiguration.Instance.GetValidatedMaxAutoRetries();
+
+        Logger.LogInfo("Configuration loaded successfully.");
+        Logger.LogInfo($"Auto-run mode: {(_autoRetryEnabled ? "ENABLED" : "DISABLED")}");
+        Logger.LogInfo($"Max auto retries: {maxRetries}");
+        Logger.LogInfo($"Max API retries: {AppConfiguration.Instance.GetValidatedMaxApiRetries()}");
+        Logger.LogInfo($"API retry wait time: {AppConfiguration.Instance.GetValidatedApiRetryWaitTimeMs()}ms" +
+                      (AppConfiguration.Instance.MultiplyApiRetryWaitTimeByAttempt ? " (multiplied by attempt)" : " (fixed)"));
+
+        foreach (var (shift, index) in AppConfiguration.Instance.TokenShifts.Select((s, i) => (s, i + 1)))
+        {
+            Logger.LogInfo($"Token Shift #{index}: {shift}ms");
+        }
+
+        if (!AppConfiguration.Instance.AutoRunOnStart)
+        {
+            Logger.LogInfo("Auto-run on start is disabled. Press Enter to begin monitoring \nor any other key to exit:");
+            var key = Console.ReadKey();
+            Console.WriteLine(); // New line after key press
+            if (key.Key != ConsoleKey.Enter)
+            {
+                Logger.LogInfo("Non-Enter key pressed. Exiting application.");
+                return false;
+            }
+        }
+        else
+        {
+            Logger.LogInfo("Auto-run on start is enabled. Beginning monitoring...");
+        }
+
+        await ClockProvider.InitializeAsync().ConfigureAwait(false);
+        Logger.LogInfo("Clock provider initialized.");
+
+        // Main monitoring loop with retry support
+        await RunWithRetryAsync().ConfigureAwait(false);
+
+        // Keep app open if not in auto-run mode
+        if (!_autoRetryEnabled)
+        {
+            Logger.LogInfo(SeparatorLine);
+            Logger.LogInfo("Application process completed.");
+            Logger.LogInfo("Please check the status details above and proceed according to instructions.");
+            Logger.LogInfo("Press any key to terminate the application.");
+            Logger.LogInfo(SeparatorLine);
+            Console.ReadKey();
+        }
+        else
+        {
+            // In auto-run mode with max retries reached, also keep open but with different message
+            if (ClockProvider.Instance is not null && !ClockProvider.Instance.CanRetry)
+            {
+                Logger.LogWarning(SeparatorLine);
+                Logger.LogWarning($"Maximum retry attempts reached ({ClockProvider.Instance.MaxRetryAttempts}).");
+                Logger.LogWarning("Token may have expired after multiple days of trying.");
+                Logger.LogWarning("Please restart the application to try again.");
+                Logger.LogWarning("Press any key to terminate the application.");
+                Logger.LogWarning(SeparatorLine);
+                Console.ReadKey();
+            }
+        }
+
+        Logger.LogInfo("Shutting down application...");
+        return true;
     }
 
     private static async Task RunWithRetryAsync()
@@ -370,9 +394,10 @@ public static class HeadlessApp
             ClockProvider.DisposeInstance();
         }
 
-        Logger.LogInfo("Application shutdown complete.");
         _cancellationTokenSource?.Dispose();
         Logger.DisposeLogger();
+
+        Logger.LogInfo("Application shutdown complete.");
     }
 
     private static void DisplayThresholdTimes()
@@ -477,7 +502,7 @@ public static class HeadlessApp
                     EvaluateBlCheckResponse(result, identifier);
                     break;
 
-                case MiDataConstants.STATUS_COOKIE_EXPIRED:
+                case MiDataConstants.STATUS_COOKIE_EXPIRED_OR_INVALID:
                     Logger.LogError($"MiDataService {identifier} - Cookie expired. Please update the cookie in the configuration.");
                     break;
 
@@ -551,7 +576,7 @@ public static class HeadlessApp
         BaseResponse<BlCheckResponseDto> response,
         string identifier)
     {
-        if (response.Code == MiDataConstants.STATUS_COOKIE_EXPIRED)
+        if (response.Code == MiDataConstants.STATUS_COOKIE_EXPIRED_OR_INVALID)
         {
             Logger.LogError($"MiDataService {identifier} - Cookie expired. Please update the cookie in the configuration.");
             throw new InvalidOperationException($"MiDataService {identifier} - Pre-check failed due to expired cookie. Cannot start MiAuthRequestProcessor.");

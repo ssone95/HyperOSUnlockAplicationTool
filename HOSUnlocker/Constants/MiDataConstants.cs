@@ -39,7 +39,7 @@ public static class MiDataConstants
     public const int STATUS_CODE_SUCCESS = 0;
     public const int STATUS_REQUEST_REJECTED = 100001;
     public const int STATUS_REQUEST_POTENTIALLY_VALID = 100003;
-    public const int STATUS_COOKIE_EXPIRED = 100004;
+    public const int STATUS_COOKIE_EXPIRED_OR_INVALID = 100004;
 
     #endregion
 }
