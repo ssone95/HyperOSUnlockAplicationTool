@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:  # Adds "Run workflow" button in GitHub Actions UI
 
 jobs:
   build:
